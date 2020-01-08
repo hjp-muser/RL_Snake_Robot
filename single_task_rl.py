@@ -16,10 +16,9 @@ class Agent(object):
 
 obs_config = ObservationConfig()
 obs_config.set_all(False)
-obs_config.left_shoulder_camera.rgb = True
-obs_config.right_shoulder_camera.rgb = True
+obs_config.head_camera.rgb = True
 
-action_mode = ActionMode(ArmActionMode.ABS_JOINT_VELOCITY)
+action_mode = ActionMode(ArmActionMode.ABS_JOINT_POSITION)
 env = Environment(
     action_mode, obs_config=obs_config, headless=False)
 env.launch()

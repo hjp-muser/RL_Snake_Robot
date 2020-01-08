@@ -1,7 +1,6 @@
 from enum import Enum
 
-EE_SIZE = 7
-JOINTS = 7
+JOINTS = 16
 
 
 class ArmActionMode(Enum):
@@ -23,18 +22,6 @@ class ArmActionMode(Enum):
 
     # Change in arm joint forces/torques
     DELTA_JOINT_TORQUE = (5, JOINTS,)
-
-    # Absolute end-effector velocity (position (3) and quaternion (4))
-    ABS_EE_VELOCITY = (6, EE_SIZE,)
-
-    # Change in end-effector velocity (position (3) and quaternion (4))
-    DELTA_EE_VELOCITY = (7, EE_SIZE,)
-
-    # Absolute end-effector pose (position (3) and quaternion (4))
-    ABS_EE_POSE = (8, EE_SIZE,)
-
-    # Change in end-effector pose (position (3) and quaternion (4))
-    DELTA_EE_POSE = (9, EE_SIZE,)
 
     def __init__(self, id, action_size):
         self.id = id

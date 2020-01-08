@@ -1,16 +1,11 @@
 from pyrep import PyRep
 from pyrep.robots.arms.panda import Panda
-from pyrep.robots.arms.jaco import Jaco
-from pyrep.robots.arms.mico import Mico
-from pyrep.robots.arms.sawyer import Sawyer
-from pyrep.robots.end_effectors.panda_gripper import PandaGripper
-from pyrep.robots.end_effectors.jaco_gripper import JacoGripper
-from pyrep.robots.end_effectors.mico_gripper import MicoGripper
-from pyrep.robots.end_effectors.baxter_gripper import BaxterGripper
 from rlbench.backend.scene import Scene
 from rlbench.backend.task import Task
 from rlbench.backend.const import *
 from rlbench.backend.robot import Robot
+from rlbench.robots.snake_head_cameras.rattler_camera import RattlerCamera
+from rlbench.robots.snake_robots.rattler import Rattler
 from os.path import exists, dirname, abspath, join
 import importlib
 from typing import Type
@@ -21,13 +16,9 @@ from rlbench.action_modes import ActionMode, ArmActionMode
 
 DIR_PATH = dirname(abspath(__file__))
 
-# Arms from PyRep need to be modified to include a wrist camera.
-# Currently, only the arms/grippers below are supported.
+# snake robots type
 SUPPORTED_ROBOTS = {
-    'panda': (Panda, PandaGripper),
-    'jaco': (Jaco, JacoGripper),
-    'mico': (Mico, MicoGripper),
-    'sawyer': (Sawyer, BaxterGripper),
+    'rattler': (Rattler, RattlerCamera),
 }
 
 
