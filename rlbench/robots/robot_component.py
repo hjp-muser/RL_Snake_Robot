@@ -1,7 +1,5 @@
 from typing import List, Tuple
 
-from pyrep.objects.shape import Shape
-
 from pyrep.backend import sim
 from pyrep.const import JointType
 from pyrep.objects.object import Object

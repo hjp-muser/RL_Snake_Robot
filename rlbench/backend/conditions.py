@@ -64,9 +64,9 @@ class NothingGrasped(Condition):
 
 
 class GraspedCondition(Condition):
-    def __init__(self, gripper: Gripper, object: Object):
+    def __init__(self, gripper: Gripper, sim_object: Object):
         self._gripper = gripper
-        self._object_handle = object.get_handle()
+        self._object_handle = sim_object.get_handle()
 
     def condition_met(self):
         met = len([ob for ob in self._gripper.get_grasped_objects()

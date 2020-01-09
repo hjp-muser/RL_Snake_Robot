@@ -1,5 +1,5 @@
 from pyrep.const import RenderMode
-from rlbench.noise_model import NoiseModel, Identity
+from rlbench.utils.noise_model import NoiseModel, Identity
 
 
 class CameraConfig(object):
@@ -34,6 +34,7 @@ class ObservationConfig(object):
                  joint_positions_noise: NoiseModel = Identity(),
                  joint_forces=True,
                  joint_forces_noise: NoiseModel = Identity(),
+                 snake_head_pose=False,
                  task_low_dim_state=False,
                  ):
         self.head_camera = (CameraConfig() if head_camera is None else head_camera)
@@ -43,6 +44,7 @@ class ObservationConfig(object):
         self.joint_positions_noise = joint_positions_noise
         self.joint_forces = joint_forces
         self.joint_forces_noise = joint_forces_noise
+        self.snake_head_pose = snake_head_pose
         self.task_low_dim_state = task_low_dim_state
 
     def set_all(self, value: bool):

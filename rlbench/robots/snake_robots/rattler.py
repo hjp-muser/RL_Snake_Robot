@@ -13,4 +13,3 @@ class Rattler(SnakeRobot):
         if num_joints == 0:
             raise ValueError("Joints number can't be 0.")
         super().__init__(count, 'rattler', num_joints)
-

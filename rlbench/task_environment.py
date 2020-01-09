@@ -1,22 +1,14 @@
-from os import listdir
-from os.path import join, exists
-import pickle
 import numpy as np
-from PIL import Image
 from pyrep import PyRep
-from pyrep.errors import IKError
 from rlbench.backend.exceptions import BoundaryError, WaypointError
 from rlbench.backend.scene import Scene
 from rlbench.backend.task import Task
-from rlbench.backend.const import *
-from rlbench.backend.utils import image_to_float_array
 from rlbench.backend.robot import Robot
 import logging
 from typing import List
 from rlbench.backend.observation import Observation
 from rlbench.action_modes import ArmActionMode, ActionMode
 from rlbench.observation_config import ObservationConfig
-from pyquaternion import Quaternion
 
 _TORQUE_MAX_VEL = 9999
 _DT = 0.05
@@ -48,7 +40,6 @@ class TaskEnvironment(object):
         self._obs_config = obs_config
         self._static_positions = static_positions
         self._reset_called = False
-        self._prev_ee_velocity = None
 
         self._scene.load(self._task)
         self._pyrep.start()
@@ -66,9 +57,7 @@ class TaskEnvironment(object):
 
         self._scene.reset()
         try:
-            desc = self._scene.init_episode(
-                self._variation_number, max_attempts=_MAX_RESET_ATTEMPTS,
-                randomly_place=not self._static_positions)
+            desc = self._scene.init_episode(self._variation_number)
         except (BoundaryError, WaypointError) as e:
             raise TaskEnvironmentError(
                 'Could not place the task %s in the scene. This should not '
@@ -151,6 +140,8 @@ class TaskEnvironment(object):
 
         else:
             raise RuntimeError('Unrecognised action mode.')
+
+        self._robot.auxiliary_equip.set_camera_state(auxiliary_action)
 
         self._scene.step()
 

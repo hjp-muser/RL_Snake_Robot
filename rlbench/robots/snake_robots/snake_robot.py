@@ -1,6 +1,7 @@
 from rlbench.robots.robot_component import RobotComponent
 
 from pyrep.backend import sim
+from pyrep.objects.dummy import Dummy
 
 
 class SnakeRobot(RobotComponent):
@@ -24,5 +25,9 @@ class SnakeRobot(RobotComponent):
 
         # handles
         suffix = '' if count == 1 else '#%d' % (count - 2)
+        self._snake_head = Dummy('%s_head%s' % (name, suffix))
         self._collision_collection = sim.simGetCollectionHandle(
             '%s_collection%s' % (name, suffix))
+
+    def get_snake_head(self):
+        return self._snake_head

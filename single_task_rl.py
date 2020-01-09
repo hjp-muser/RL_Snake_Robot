@@ -23,7 +23,7 @@ env = Environment(
     action_mode, obs_config=obs_config, headless=False)
 env.launch()
 
-task = env.get_task(ReachTarget)  # TODO
+task = env.get_task(ReachTarget)
 
 agent = Agent(action_mode.action_size)
 
