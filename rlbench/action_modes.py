@@ -1,9 +1,6 @@
 from enum import Enum
 
-from rlbench.robots.snake_head_cameras.rattler_camera import RattlerCamera
-from rlbench.robots.snake_robots.rattler import Rattler
-
-SNAKE_ROBOT_JOINTS = 16
+SNAKE_ROBOT_JOINTS = 17
 
 
 class SnakeRobotActionMode(Enum):
@@ -94,10 +91,11 @@ class GripperActionMode(Enum):
 class ActionMode(object):
 
     def __init__(self,
-                 robot_body: SnakeRobotActionMode = SnakeRobotActionMode.ABS_JOINT_VELOCITY,
-                 auxiliary_equip: CameraActionMode = CameraActionMode.OPEN_AMOUNT):
-        if isinstance(robot_body, Rattler) and isinstance(auxiliary_equip, RattlerCamera):
-            raise NotImplementedError("Not implement the other robot except rattler.")
-        self.robot_body = robot_body
-        self.auxiliary_equip = auxiliary_equip
-        self.action_size = self.robot_body.action_size
+                 robot_action_mode: SnakeRobotActionMode = SnakeRobotActionMode.ABS_JOINT_VELOCITY,
+                 aux_equip_action_mode: CameraActionMode = CameraActionMode.OPEN_AMOUNT):
+        if not (isinstance(robot_action_mode, SnakeRobotActionMode) and
+                isinstance(aux_equip_action_mode, CameraActionMode)):
+            raise NotImplementedError("Not implement for the other action mode except snake robot action mode.")
+        self.robot_action_mode = robot_action_mode
+        self.aux_equip_action_mode = aux_equip_action_mode
+        self.action_size = self.robot_action_mode.action_size

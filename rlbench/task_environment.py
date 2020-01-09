@@ -7,7 +7,7 @@ from rlbench.backend.robot import Robot
 import logging
 from typing import List
 from rlbench.backend.observation import Observation
-from rlbench.action_modes import ArmActionMode, ActionMode
+from rlbench.action_modes import ActionMode, SnakeRobotActionMode
 from rlbench.observation_config import ObservationConfig
 
 _TORQUE_MAX_VEL = 9999
@@ -101,38 +101,38 @@ class TaskEnvironment(object):
 
         auxiliary_action = action[-1]
 
-        if self._action_mode.robot_body == ArmActionMode.ABS_JOINT_VELOCITY:
+        if self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_JOINT_VELOCITY:
 
             self._assert_action_space(robot_action,
                                       (len(self._robot.robot_body.joints),))
             self._robot.robot_body.set_joint_target_velocities(robot_action)
 
-        elif self._action_mode.robot_body == ArmActionMode.DELTA_JOINT_VELOCITY:
+        elif self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_JOINT_VELOCITY:
 
             self._assert_action_space(robot_action,
                                       (len(self._robot.robot_body.joints),))
             cur = np.array(self._robot.robot_body.get_joint_velocities())
             self._robot.robot_body.set_joint_target_velocities(cur + robot_action)
 
-        elif self._action_mode.robot_body == ArmActionMode.ABS_JOINT_POSITION:
+        elif self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_JOINT_POSITION:
 
             self._assert_action_space(robot_action,
                                       (len(self._robot.robot_body.joints),))
             self._robot.robot_body.set_joint_target_positions(robot_action)
 
-        elif self._action_mode.robot_body == ArmActionMode.DELTA_JOINT_POSITION:
+        elif self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_JOINT_POSITION:
 
             self._assert_action_space(robot_action,
                                       (len(self._robot.robot_body.joints),))
             cur = np.array(self._robot.robot_body.get_joint_positions())
             self._robot.robot_body.set_joint_target_positions(cur + robot_action)
 
-        elif self._action_mode.robot_body == ArmActionMode.ABS_JOINT_TORQUE:
+        elif self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_JOINT_TORQUE:
 
             self._assert_action_space(robot_action, (len(self._robot.robot_body.joints),))
             self._torque_action(robot_action)
 
-        elif self._action_mode.robot_body == ArmActionMode.DELTA_JOINT_TORQUE:
+        elif self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_JOINT_TORQUE:
 
             cur = np.array(self._robot.robot_body.get_joint_forces())
             new_action = cur + robot_action

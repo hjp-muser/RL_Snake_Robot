@@ -49,19 +49,19 @@ class Environment(object):
 
     def _set_control_action(self):
         self._robot.robot_body.set_control_loop_enabled(True)
-        if (self._action_mode.robot_body == SnakeRobotActionMode.ABS_JOINT_VELOCITY or
-                self._action_mode.robot_body == SnakeRobotActionMode.DELTA_JOINT_VELOCITY):
+        if (self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_JOINT_VELOCITY or
+                self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_JOINT_VELOCITY):
             self._robot.robot_body.set_control_loop_enabled(False)
             self._robot.robot_body.set_motor_locked_at_zero_velocity(True)
-        elif (self._action_mode.robot_body == SnakeRobotActionMode.ABS_JOINT_POSITION or
-                self._action_mode.robot_body == SnakeRobotActionMode.DELTA_JOINT_POSITION or
-                self._action_mode.robot_body == SnakeRobotActionMode.ABS_EE_POSE or
-                self._action_mode.robot_body == SnakeRobotActionMode.DELTA_EE_POSE or
-                self._action_mode.robot_body == SnakeRobotActionMode.ABS_EE_VELOCITY or
-                self._action_mode.robot_body == SnakeRobotActionMode.DELTA_EE_VELOCITY):
+        elif (self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_JOINT_POSITION or
+              self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_JOINT_POSITION or
+              self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_EE_POSE or
+              self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_EE_POSE or
+              self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_EE_VELOCITY or
+              self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_EE_VELOCITY):
             self._robot.robot_body.set_control_loop_enabled(True)
-        elif (self._action_mode.robot_body == SnakeRobotActionMode.ABS_JOINT_TORQUE or
-                self._action_mode.robot_body == SnakeRobotActionMode.DELTA_JOINT_TORQUE):
+        elif (self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_JOINT_TORQUE or
+              self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_JOINT_TORQUE):
             self._robot.robot_body.set_control_loop_enabled(False)
         else:
             raise RuntimeError('Unrecognised action mode.')
@@ -94,7 +94,7 @@ class Environment(object):
         snake_robot_class, camera_class = SUPPORTED_ROBOTS[self._robot_configuration]
 
         # We assume the panda is already loaded in the scene.
-        if self._robot_configuration is not 'rattler':
+        if self._robot_configuration != 'rattler':
             raise NotImplementedError("Not implemented the robot")
         else:
             snake_robot, camera = snake_robot_class(), camera_class()

@@ -13,10 +13,12 @@ from rlbench.backend.conditions import DetectedCondition
 class ReachTarget(Task):
     def __init__(self, pyrep: PyRep, robot: Robot):
         super().__init__(pyrep, robot)
-        self.target = Shape('target')
-        self.success_sensor = ProximitySensor('success')
+        self.target = None
+        self.success_sensor = None
 
     def init_task(self) -> None:
+        self.target = Shape('target')
+        self.success_sensor = ProximitySensor('success')
         self.register_success_conditions(
             [DetectedCondition(self.robot.robot_body.get_snake_head(), self.success_sensor)])
 

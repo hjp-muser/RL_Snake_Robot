@@ -7,7 +7,7 @@ class Robot(object):
     """
 
     def __init__(self, robot_body: Rattler, auxiliary_equip: RattlerCamera):
-        if isinstance(robot_body, Rattler) and isinstance(auxiliary_equip, RattlerCamera):
+        if not (isinstance(robot_body, Rattler) and isinstance(auxiliary_equip, RattlerCamera)):
             raise NotImplementedError("Not implement the other robot except rattler.")
         self.robot_body = robot_body
         self.auxiliary_equip = auxiliary_equip
