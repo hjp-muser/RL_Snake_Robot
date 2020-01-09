@@ -131,7 +131,7 @@ class Task(object):
     def decorate_observation(self, observation: Observation) -> Observation:
         """Can be used for tasks that want to modify the observations.
 
-        Usually not used. Perhpas cabn be used to model
+        Usually not used. Perhpas can be used to model
 
         :param observation: The Observation for this time step.
         :return: The modified Observation.

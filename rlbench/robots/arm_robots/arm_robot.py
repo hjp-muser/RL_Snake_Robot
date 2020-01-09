@@ -1,6 +1,7 @@
 from pyrep.robots.arms.arm import Arm
 from pyrep.robots.end_effectors.gripper import Gripper
 
+
 class ArmRobot(object):
     """Simple container for the robots components.
     """

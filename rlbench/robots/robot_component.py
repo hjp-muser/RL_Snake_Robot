@@ -15,12 +15,14 @@ class RobotComponent(Object):
 
     def __init__(self, count: int, name: str, joint_names: List[str],
                  base_name: str = None):
-        suffix = '' if count == 0 else '#%d' % (count - 1)
+        suffix = '' if count == 1 else '#%d' % (count - 2)
+
+        # Model handle
         super().__init__(
             name + suffix if base_name is None else base_name + suffix)
-        self._num_joints = len(joint_names)
 
         # Joint handles
+        self._num_joints = len(joint_names)
         self.joints = [Joint(jname + suffix)
                        for jname in joint_names]
 

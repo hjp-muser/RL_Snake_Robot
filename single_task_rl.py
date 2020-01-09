@@ -1,5 +1,5 @@
 from rlbench.environment import Environment
-from rlbench.action_modes import ArmActionMode, ActionMode
+from rlbench.action_modes import SnakeRobotActionMode, ActionMode
 from rlbench.observation_config import ObservationConfig
 from rlbench.tasks import ReachTarget
 import numpy as np
@@ -18,12 +18,12 @@ obs_config = ObservationConfig()
 obs_config.set_all(False)
 obs_config.head_camera.rgb = True
 
-action_mode = ActionMode(ArmActionMode.ABS_JOINT_POSITION)
+action_mode = ActionMode(SnakeRobotActionMode.ABS_JOINT_POSITION)
 env = Environment(
     action_mode, obs_config=obs_config, headless=False)
 env.launch()
 
-task = env.get_task(ReachTarget)
+task = env.get_task(ReachTarget)  # TODO
 
 agent = Agent(action_mode.action_size)
 

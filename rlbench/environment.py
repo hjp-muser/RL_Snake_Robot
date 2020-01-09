@@ -1,5 +1,4 @@
 from pyrep import PyRep
-from pyrep.robots.arms.panda import Panda
 from rlbench.backend.scene import Scene
 from rlbench.backend.task import Task
 from rlbench.backend.const import *
@@ -11,7 +10,7 @@ import importlib
 from typing import Type
 from rlbench.observation_config import ObservationConfig
 from rlbench.task_environment import TaskEnvironment
-from rlbench.action_modes import ActionMode, ArmActionMode
+from rlbench.action_modes import ActionMode, SnakeRobotActionMode
 
 
 DIR_PATH = dirname(abspath(__file__))
@@ -25,10 +24,10 @@ SUPPORTED_ROBOTS = {
 class Environment(object):
     """Each environment has a scene."""
 
-    def __init__(self, action_mode: ActionMode, dataset_root: str= '',
+    def __init__(self, action_mode: ActionMode, dataset_root: str = '',
                  obs_config=ObservationConfig(), headless=False,
                  static_positions: bool = False,
-                 robot_configuration='panda'):
+                 robot_configuration='rattler'):
 
         self._dataset_root = dataset_root
         self._action_mode = action_mode
@@ -48,22 +47,22 @@ class Environment(object):
         self._scene = None
         self._prev_task = None
 
-    def _set_arm_control_action(self):
-        self._robot.arm.set_control_loop_enabled(True)
-        if (self._action_mode.arm == ArmActionMode.ABS_JOINT_VELOCITY or
-                self._action_mode.arm == ArmActionMode.DELTA_JOINT_VELOCITY):
-            self._robot.arm.set_control_loop_enabled(False)
-            self._robot.arm.set_motor_locked_at_zero_velocity(True)
-        elif (self._action_mode.arm == ArmActionMode.ABS_JOINT_POSITION or
-                self._action_mode.arm == ArmActionMode.DELTA_JOINT_POSITION or
-                self._action_mode.arm == ArmActionMode.ABS_EE_POSE or
-                self._action_mode.arm == ArmActionMode.DELTA_EE_POSE or
-                self._action_mode.arm == ArmActionMode.ABS_EE_VELOCITY or
-                self._action_mode.arm == ArmActionMode.DELTA_EE_VELOCITY):
-            self._robot.arm.set_control_loop_enabled(True)
-        elif (self._action_mode.arm == ArmActionMode.ABS_JOINT_TORQUE or
-                self._action_mode.arm == ArmActionMode.DELTA_JOINT_TORQUE):
-            self._robot.arm.set_control_loop_enabled(False)
+    def _set_control_action(self):
+        self._robot.robot_body.set_control_loop_enabled(True)
+        if (self._action_mode.robot_body == SnakeRobotActionMode.ABS_JOINT_VELOCITY or
+                self._action_mode.robot_body == SnakeRobotActionMode.DELTA_JOINT_VELOCITY):
+            self._robot.robot_body.set_control_loop_enabled(False)
+            self._robot.robot_body.set_motor_locked_at_zero_velocity(True)
+        elif (self._action_mode.robot_body == SnakeRobotActionMode.ABS_JOINT_POSITION or
+                self._action_mode.robot_body == SnakeRobotActionMode.DELTA_JOINT_POSITION or
+                self._action_mode.robot_body == SnakeRobotActionMode.ABS_EE_POSE or
+                self._action_mode.robot_body == SnakeRobotActionMode.DELTA_EE_POSE or
+                self._action_mode.robot_body == SnakeRobotActionMode.ABS_EE_VELOCITY or
+                self._action_mode.robot_body == SnakeRobotActionMode.DELTA_EE_VELOCITY):
+            self._robot.robot_body.set_control_loop_enabled(True)
+        elif (self._action_mode.robot_body == SnakeRobotActionMode.ABS_JOINT_TORQUE or
+                self._action_mode.robot_body == SnakeRobotActionMode.DELTA_JOINT_TORQUE):
+            self._robot.robot_body.set_control_loop_enabled(False)
         else:
             raise RuntimeError('Unrecognised action mode.')
 
@@ -72,7 +71,8 @@ class Environment(object):
             raise RuntimeError(
                 'Data set root does not exists: %s' % self._dataset_root)
 
-    def _string_to_task(self, task_name: str):
+    @staticmethod
+    def _string_to_task(task_name: str):
         task_name = task_name.replace('.py', '')
         try:
             class_name = ''.join(
@@ -91,25 +91,17 @@ class Environment(object):
         self._pyrep.launch(join(DIR_PATH, TTT_FILE), headless=self._headless)
         self._pyrep.set_simulation_timestep(0.005)
 
-        arm_class, gripper_class = SUPPORTED_ROBOTS[self._robot_configuration]
+        snake_robot_class, camera_class = SUPPORTED_ROBOTS[self._robot_configuration]
 
         # We assume the panda is already loaded in the scene.
-        if self._robot_configuration is not 'panda':
-            # Remove the panda from the scene
-            panda_arm = Panda()
-            panda_pos = panda_arm.get_position()
-            panda_arm.remove()
-            arm_path = join(DIR_PATH,
-                            'robot_ttms', self._robot_configuration + '.ttm')
-            self._pyrep.import_model(arm_path)
-            arm, gripper = arm_class(), gripper_class()
-            arm.set_position(panda_pos)
+        if self._robot_configuration is not 'rattler':
+            raise NotImplementedError("Not implemented the robot")
         else:
-            arm, gripper = arm_class(), gripper_class()
+            snake_robot, camera = snake_robot_class(), camera_class()
 
-        self._robot = Robot(arm, gripper)
+        self._robot = Robot(snake_robot, camera)
         self._scene = Scene(self._pyrep, self._robot, self._obs_config)
-        self._set_arm_control_action()
+        self._set_control_action()
 
     def shutdown(self):
         if self._pyrep is not None:

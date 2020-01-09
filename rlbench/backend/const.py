@@ -16,7 +16,7 @@ VARIATIONS_FOLDER = 'variation%d'
 LOW_DIM_PICKLE = 'low_dim_obs.pkl'
 VARIATION_DESCRIPTIONS = 'variation_descriptions.pkl'
 
-TTT_FILE = 'task_design.ttt'
+TTT_FILE = 'snake_robot_model.ttt'
 
 DEPTH_SCALE = 1000.0
 

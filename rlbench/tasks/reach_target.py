@@ -9,12 +9,11 @@ from rlbench.backend.conditions import DetectedCondition
 
 
 class ReachTarget(Task):
+    def __init__(self):
+        super(ReachTarget, self).__init__()
 
     def init_task(self) -> None:
         self.target = Shape('target')
-        self.distractor0 = Shape('distractor0')
-        self.distractor1 = Shape('distractor1')
-        self.boundaries = Shape('boundary')
         success_sensor = ProximitySensor('success')
         self.register_success_conditions(
             [DetectedCondition(self.robot.arm.get_tip(), success_sensor)])
