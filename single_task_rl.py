@@ -10,9 +10,19 @@ class Agent(object):
 
     def __init__(self, action_size):
         self.action_size = action_size
+        self.clk = 0
 
     def act(self, obs):
-        return (np.random.normal(-0.7, 0.7, size=(self.action_size,))).tolist()
+        joints = np.zeros((self.action_size,))
+        for i in range(self.action_size):
+            if i % 2 == 0:
+                joints[i] = -0.4 * np.sin(8 * self.clk + (i/2) * 30)
+            else:
+                joints[i] = -0.4 * np.sin(8 * self.clk + (i/2) * 30)
+
+        # return (np.random.normal(-0.7, 0.7, size=(self.action_size,))).tolist()
+        self.clk += 0.05
+        return joints.tolist()
 
 
 obs_config = ObservationConfig()
@@ -28,16 +38,17 @@ task = env.get_task(ReachTarget)
 
 agent = Agent(action_mode.action_size)
 
-training_steps = 800
-episode_length = 40
+training_steps = 2000
+episode_length = 1000
 obs = None
 for i in range(training_steps):
     if i % episode_length == 0:
         print('Reset Episode')
         descriptions, obs = task.reset()
-        print(descriptions)
+        agent.clk = 0
+        # print(descriptions)
     action = agent.act(obs)
-    print(action)
+    # print(action)
     obs, reward, terminate = task.step(action)
 
 print('Done')
