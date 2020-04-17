@@ -40,6 +40,7 @@ class TaskEnvironment(object):
         self._obs_config = obs_config
         self._static_positions = static_positions
         self._reset_called = False
+        self._time_step = 0
 
         self._scene.load(self._task)
         self._pyrep.start()
@@ -144,6 +145,14 @@ class TaskEnvironment(object):
         self._robot.auxiliary_equip.set_camera_state(auxiliary_action)
 
         self._scene.step()
+        self._time_step += 1
 
         success, terminate = self._task.success()
-        return self._scene.get_observation(), int(success), terminate
+        reward = self._task.get_reward()
+        if success != 0:
+            reward = 100
+        if self._time_step >= self._task.get_epi_len():
+            terminate = True
+            self._time_step = 0
+
+        return self._scene.get_observation(), reward, terminate

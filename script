@@ -1,0 +1,12 @@
+python run_baseline.py --alg=a2c --env=reach_target-vision-v0 --network=cnn_lstm --save_path=~/models/reach_target_cnn --num_timesteps=4e5 --log_path=~/models/log/reach_target/ --num_env=4
+
+python run_baseline.py --alg=a2c --env=reach_target-vision-v0 --network=cnn --save_path=~/models/reach_target_cnn --num_timesteps=2e5 --log_path=~/models/log/reach_target/ --save_video_interval=10000 --save_video_length=500
+
+python run_baseline.py --alg=a2c --env=reach_target-state-v0 --save_path=~/models/reach_target_state_mlp --num_timesteps=1e5 --log_path=~/models/log/reach_target/ --num_env=4
+
+python run_baseline.py --alg=acktr --env=reach_target-state-v0 --save_path=~/models/reach_target_state_acktr --num_timesteps=1e6 --log_path=~/models/log/reach_target/ --num_env=4
+
+python -m baselines.run --alg=a2c --env=Pendulum-v0 --save_path=~/models/Pendulum_a2c --num_timesteps=1e5 --num_env=4 --network=cnn
+
+# play
+python run_baseline.py --alg=a2c --env=reach_target-vision-v0 --network=cnn_lstm --num_timesteps=0 --load_path=~/models/reach_target_cnn --play

@@ -15,6 +15,7 @@ class ReachTarget(Task):
         super().__init__(pyrep, robot)
         self.target = None
         self.success_sensor = None
+        self._epi_len = 3e2
 
     def init_task(self) -> None:
         self.target = Shape('target')
@@ -30,3 +31,12 @@ class ReachTarget(Task):
 
     def variation_count(self) -> int:
         return len(colors)
+
+    def get_reward(self) -> int:
+        tar_pos = np.array(self.target.get_position())
+        agent_pos = np.array(self.robot.get_position())
+        dis = np.sqrt(np.sum((tar_pos[:2]-agent_pos[:2])**2))
+        return -dis
+
+    def get_epi_len(self) -> int:
+        return self._epi_len

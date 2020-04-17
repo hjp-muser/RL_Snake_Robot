@@ -55,7 +55,13 @@ class ObservationConfig(object):
         self.head_camera.set_all(value)
 
     def set_all_low_dim(self, value: bool):
-        self.joint_velocities = value
+        # self.joint_velocities = value
         self.joint_positions = value
         self.joint_forces = value
-        self.task_low_dim_state = value
+        # self.task_low_dim_state = value
+
+    def set_camera_rgb(self, value: bool):
+        self.head_camera.rgb = value
+
+    def set_camera_depth(self, value: bool):
+        self.head_camera.depth = value

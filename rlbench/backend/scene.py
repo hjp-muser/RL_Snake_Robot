@@ -116,7 +116,7 @@ class Scene(object):
                 if self._obs_config.joint_velocities else None),
             joint_positions=(
                 self._obs_config.joint_positions_noise.apply(
-                    np.array(self._snake_robot.arm.get_joint_positions()))
+                    np.array(self._snake_robot.get_joint_positions()))
                 if self._obs_config.joint_positions else None),
             joint_forces=joint_forces,
             snake_head_pose=(

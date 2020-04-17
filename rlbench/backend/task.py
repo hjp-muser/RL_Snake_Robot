@@ -101,6 +101,14 @@ class Task(object):
         """
         pass
 
+    def get_epi_len(self) -> int:
+        """Get the episode length of the specific task"""
+        pass
+
+    def get_reward(self) -> int:
+        """Get the rewards"""
+        pass
+
     @staticmethod
     def decorate_observation(observation: Observation) -> Observation:
         """Can be used for tasks that want to modify the observations.

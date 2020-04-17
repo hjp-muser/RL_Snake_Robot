@@ -31,3 +31,6 @@ class SnakeRobot(RobotComponent):
 
     def get_snake_head(self):
         return self._snake_head
+
+    def get_snake_head_pos(self):
+        return self._snake_head.get_position()

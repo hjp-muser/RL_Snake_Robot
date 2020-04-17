@@ -11,3 +11,6 @@ class Robot(object):
             raise NotImplementedError("Not implement the other robot except rattler.")
         self.robot_body = robot_body
         self.auxiliary_equip = auxiliary_equip
+
+    def get_position(self):
+        return self.robot_body.get_position()

@@ -19,7 +19,7 @@ class RattlerCamera(object):
 
     def set_camera_properties(self, conf: CameraConfig) -> None:
         if not (conf.rgb or conf.depth):
-            raise NotImplementedError("You can only choose one mode between rgb or depth.")
+            self._head_camera.remove()
         else:
             self._head_camera.set_resolution(conf.image_size)
             self._head_camera.set_render_mode(conf.render_mode)
