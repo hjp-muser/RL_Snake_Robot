@@ -37,7 +37,7 @@ for env in gym.envs.registry.all():
     _game_envs[env_type].add(env.id)
 
 # reading benchmark names directly from retro requires
-# importing retro here, and for some reason that crashes tensorflow
+# importing retro here, and for some reason that crashes tensorflow1
 # in ubuntu
 _game_envs['retro'] = {
     'BubbleBobble-Nes',

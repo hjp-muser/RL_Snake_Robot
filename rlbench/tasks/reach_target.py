@@ -35,8 +35,9 @@ class ReachTarget(Task):
     def get_reward(self) -> int:
         tar_pos = np.array(self.target.get_position())
         agent_pos = np.array(self.robot.get_position())
-        dis = np.sqrt(np.sum((tar_pos[:2]-agent_pos[:2])**2))
-        return -dis
+        # dis = np.sqrt(np.sum((tar_pos[:2]-agent_pos[:2])**2))
+        dis = np.sum(np.abs(tar_pos[:2]-agent_pos[:2]))
+        return 1/dis
 
     def get_epi_len(self) -> int:
         return self._epi_len

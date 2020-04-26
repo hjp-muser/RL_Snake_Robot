@@ -151,7 +151,7 @@ class TaskEnvironment(object):
         reward = self._task.get_reward()
         if success != 0:
             reward = 100
-        if self._time_step >= self._task.get_epi_len():
+        if self._time_step >= self._task.get_epi_len():     # timeout
             terminate = True
             self._time_step = 0
 

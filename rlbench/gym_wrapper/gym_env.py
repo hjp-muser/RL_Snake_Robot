@@ -73,13 +73,10 @@ class RLBenchEnv(gym.Env):
 
     def render(self, mode='human'):
         if self._gym_cam is None:
-            pass
-        #     # Add the camera to the scene
-        #     cam_placeholder = Dummy('cam_cinematic_placeholder')
-        #     self._gym_cam = VisionSensor.create([640, 360], position=[2.82, -40.43, 2.79], orientation=[-180, -45, 90], far_clipping_plane=100.0)
-        #     self._gym_cam = VisionSensor('rattler_eye')
-        #     # self._gym_cam.set_pose(cam_placeholder.get_pose())
-        #     self._gym_cam.set_render_mode(RenderMode.OPENGL3_WINDOWED)
+            # # Add the camera to the scene
+            self._gym_cam = VisionSensor('monitor')
+            self._gym_cam.set_resolution([640, 640])
+            self._gym_cam.set_render_mode(RenderMode.EXTERNAL_WINDOWED)
 
     def reset(self):
         descriptions, obs = self.task.reset()
