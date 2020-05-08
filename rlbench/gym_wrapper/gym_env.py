@@ -4,7 +4,7 @@ from pyrep.const import RenderMode
 from pyrep.objects.dummy import Dummy
 from pyrep.objects.vision_sensor import VisionSensor
 from rlbench.environment import Environment
-from rlbench.action_modes import ActionMode, SnakeRobotActionMode
+from rlbench.action_config import ActionConfig, SnakeRobotActionConfig
 from rlbench.observation_config import ObservationConfig
 import numpy as np
 
@@ -14,31 +14,43 @@ class RLBenchEnv(gym.Env):
 
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, task_class, observation_mode='state'):
+    def __init__(self, task_class, observation_mode='state', action_mode='joint'):
         self._observation_mode = observation_mode
-        obs_config = ObservationConfig()
+        self.obs_config = ObservationConfig()
         if observation_mode == 'state':
-            obs_config.set_all_high_dim(False)
-            obs_config.set_all_low_dim(True)
+            self.obs_config.set_all_high_dim(False)
+            self.obs_config.set_all_low_dim(True)
         elif observation_mode == 'vision':
-            obs_config.set_all(False)
-            obs_config.set_camera_rgb(True)
+            self.obs_config.set_all(False)
+            self.obs_config.set_camera_rgb(True)
         elif observation_mode == 'both':
-            obs_config.set_all(True)
+            self.obs_config.set_all(True)
         else:
-            raise ValueError(
-                'Unrecognised observation_mode: %s.' % observation_mode)
-        action_mode = ActionMode(SnakeRobotActionMode.ABS_JOINT_POSITION)
-        self.env = Environment(
-            action_mode, obs_config=obs_config, headless=True)
+            raise ValueError('Unrecognised observation_mode: %s.' % observation_mode)
+
+        self._action_mode = action_mode
+        self.ac_config = None
+        if action_mode == 'joint':
+            self.ac_config = ActionConfig(SnakeRobotActionConfig.ABS_JOINT_POSITION)
+        elif action_mode == 'trigon':
+            self.ac_config = ActionConfig(SnakeRobotActionConfig.TRIGON_MODEL_PARAM)
+        else:
+            raise ValueError('Unrecognised action_mode: %s.' % action_mode)
+
+        self.env = Environment(action_config=self.ac_config, obs_config=self.obs_config, headless=True)
         self.env.launch()
         self.task = self.env.get_task(task_class)
 
         _, obs = self.task.reset()
 
-        self.action_space = spaces.Box(
-            low=-1.7, high=1.7, shape=(action_mode.action_size,),
-            dtype=np.float32)
+        if action_mode == 'joint':
+            self.action_space = spaces.Box(
+                low=-1.7, high=1.7, shape=(self.ac_config.action_size,),
+                dtype=np.float32)
+        elif action_mode == 'trigon':
+            low = np.array([1.0, 3.0, -50, -10, -0.8, -0.8, -0.1, -0.1])
+            high = np.array([3.0, 5.0, 50, 10, 0.8, 0.8, 0.1, 0.1])
+            self.action_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
         if observation_mode == 'state':
             self.observation_space = spaces.Box(

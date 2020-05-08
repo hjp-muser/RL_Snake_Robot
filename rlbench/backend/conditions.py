@@ -1,5 +1,7 @@
 from typing import List
 import math
+import numpy as np
+
 from pyrep.objects.shape import Shape
 from pyrep.objects.joint import Joint
 from pyrep.objects.object import Object
@@ -52,6 +54,21 @@ class DetectedCondition(Condition):
         if self._negated:
             met = not met
         return met, met
+
+
+class OutOfBoundCondition(Condition):
+    def __init__(self, obj: Object, target: Object, max_dis: float):
+        self._obj = obj
+        self._target = target
+        self._max_dis = max_dis
+
+    def condition_met(self):
+        cur_obj_pos = np.array(self._obj.get_position())
+        cur_tar_pos = np.array(self._target.get_position())
+        cur_dis = np.sqrt(np.sum((cur_obj_pos[:2] - cur_tar_pos[:2]) ** 2))
+        if cur_dis >= self._max_dis:
+            return True, True
+        return False, False
 
 
 class NothingGrasped(Condition):

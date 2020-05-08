@@ -1,14 +1,15 @@
 import sys
+import re
 import multiprocessing
 import gym
 from collections import defaultdict
-import re
+import tensorflow as tf
 
 import rlbench.gym_wrapper
 from baselines.common.cmd_util import make_vec_env, make_env
-from baselines.common.vec_env import VecFrameStack, VecNormalize, VecEnv
-import tensorflow as tf
-from baselines.common.tf_util import get_session
+from baselines.common.vec_env import VecFrameStack, VecNormalize
+
+from algorithm.RL_algorithm.utils.tensorflow1.tf_utils import get_session
 
 
 def get_env_type(args):
@@ -41,7 +42,8 @@ def get_env_type(args):
 
 def build_env(args):
     ncpu = multiprocessing.cpu_count()
-    if sys.platform == 'darwin': ncpu //= 2
+    if sys.platform == 'darwin':
+        ncpu //= 2
     nenv = args.num_env or ncpu
     alg = args.alg
     seed = args.seed
@@ -60,13 +62,14 @@ def build_env(args):
 
     else:
         config = tf.ConfigProto(allow_soft_placement=True,
-                               intra_op_parallelism_threads=1,
-                               inter_op_parallelism_threads=1)
+                                intra_op_parallelism_threads=1,
+                                inter_op_parallelism_threads=1)
         config.gpu_options.allow_growth = True
         get_session(config=config)
 
         flatten_dict_observations = alg not in {'her'}
-        env = make_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale, flatten_dict_observations=flatten_dict_observations)
+        env = make_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale,
+                           flatten_dict_observations=flatten_dict_observations)
 
         if env_type == 'mujoco':
             env = VecNormalize(env, use_tf=True)

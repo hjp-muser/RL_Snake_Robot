@@ -31,6 +31,7 @@ class Task(object):
         self.robot = robot
         self._waypoints = None
         self._success_conditions = []
+        self._fail_conditions = []
         self._graspable_objects = []
         self._base_object = None
         self._waypoint_additional_inits = {}
@@ -133,6 +134,15 @@ class Task(object):
         """
         self._success_conditions = condition
 
+    def register_fail_conditions(self, condition: List[Condition]):
+        """What conditions need to be met for the task to be a fail.
+
+        Note: this replaces any previously registered conditions!
+
+        :param condition: A list of fail conditions.
+        """
+        self._fail_conditions = condition
+
     def get_name(self) -> str:
         """The name of the task file (without the .py extension).
 
@@ -150,6 +160,15 @@ class Task(object):
         all_met = True
         one_terminate = False
         for cond in self._success_conditions:
+            met, terminate = cond.condition_met()
+            all_met &= met
+            one_terminate |= terminate
+        return all_met, one_terminate
+
+    def fail(self):
+        all_met = True
+        one_terminate = False
+        for cond in self._fail_conditions:
             met, terminate = cond.condition_met()
             all_met &= met
             one_terminate |= terminate
@@ -176,11 +195,14 @@ class Task(object):
     def cleanup_(self) -> None:
         for cond in self._success_conditions:
             cond.reset()
+        for cond in self._fail_conditions:
+            cond.reset()
         self._waypoints = None
         self.cleanup()
 
     def clear_registerings(self) -> None:
         self._success_conditions = []
+        self._fail_conditions = []
         self._graspable_objects = []
         self._base_object = None
         self._waypoint_additional_inits = {}

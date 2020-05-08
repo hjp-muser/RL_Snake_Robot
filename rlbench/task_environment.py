@@ -7,7 +7,7 @@ from rlbench.backend.robot import Robot
 import logging
 from typing import List
 from rlbench.backend.observation import Observation
-from rlbench.action_modes import ActionMode, SnakeRobotActionMode
+from rlbench.action_config import ActionConfig, SnakeRobotActionConfig
 from rlbench.observation_config import ObservationConfig
 
 _TORQUE_MAX_VEL = 9999
@@ -27,7 +27,7 @@ class TaskEnvironmentError(Exception):
 class TaskEnvironment(object):
 
     def __init__(self, pyrep: PyRep, robot: Robot, scene: Scene, task: Task,
-                 action_mode: ActionMode, dataset_root: str,
+                 action_config: ActionConfig, dataset_root: str,
                  obs_config: ObservationConfig,
                  static_positions: bool = False):
         self._pyrep = pyrep
@@ -35,7 +35,7 @@ class TaskEnvironment(object):
         self._scene = scene
         self._task = task
         self._variation_number = 0
-        self._action_mode = action_mode
+        self._action_config = action_config
         self._dataset_root = dataset_root
         self._obs_config = obs_config
         self._static_positions = static_positions
@@ -54,6 +54,7 @@ class TaskEnvironment(object):
         return self._variation_number
 
     def reset(self) -> (List[str], Observation):
+        print('Resetting task: %s' % self._task.get_name())
         logging.info('Resetting task: %s' % self._task.get_name())
 
         self._scene.reset()
@@ -97,62 +98,79 @@ class TaskEnvironment(object):
             raise RuntimeError(
                 "Call 'reset' before calling 'step' on a task.")
 
-        # action should contain 1 extra value for camera open close state
-        robot_action = np.array(action[:-1])
+        # robot_action = np.array(action[:-1]) # action should contain 1 extra value for camera open close state
+        # auxiliary_action = action[-1]
+        robot_action = np.array(action)
 
-        auxiliary_action = action[-1]
-
-        if self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_JOINT_VELOCITY:
+        if self._action_config.robot_action_config == SnakeRobotActionConfig.ABS_JOINT_VELOCITY:
 
             self._assert_action_space(robot_action,
                                       (len(self._robot.robot_body.joints),))
             self._robot.robot_body.set_joint_target_velocities(robot_action)
 
-        elif self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_JOINT_VELOCITY:
+        elif self._action_config.robot_action_config == SnakeRobotActionConfig.DELTA_JOINT_VELOCITY:
 
             self._assert_action_space(robot_action,
                                       (len(self._robot.robot_body.joints),))
             cur = np.array(self._robot.robot_body.get_joint_velocities())
             self._robot.robot_body.set_joint_target_velocities(cur + robot_action)
 
-        elif self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_JOINT_POSITION:
+        elif self._action_config.robot_action_config == SnakeRobotActionConfig.ABS_JOINT_POSITION:
 
             self._assert_action_space(robot_action,
                                       (len(self._robot.robot_body.joints),))
             self._robot.robot_body.set_joint_target_positions(robot_action)
 
-        elif self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_JOINT_POSITION:
+        elif self._action_config.robot_action_config == SnakeRobotActionConfig.DELTA_JOINT_POSITION:
 
             self._assert_action_space(robot_action,
                                       (len(self._robot.robot_body.joints),))
             cur = np.array(self._robot.robot_body.get_joint_positions())
             self._robot.robot_body.set_joint_target_positions(cur + robot_action)
 
-        elif self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_JOINT_TORQUE:
+        elif self._action_config.robot_action_config == SnakeRobotActionConfig.ABS_JOINT_TORQUE:
 
             self._assert_action_space(robot_action, (len(self._robot.robot_body.joints),))
             self._torque_action(robot_action)
 
-        elif self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_JOINT_TORQUE:
+        elif self._action_config.robot_action_config == SnakeRobotActionConfig.DELTA_JOINT_TORQUE:
 
             cur = np.array(self._robot.robot_body.get_joint_forces())
             new_action = cur + robot_action
             self._torque_action(new_action)
 
+        elif self._action_config.robot_action_config == SnakeRobotActionConfig.TRIGON_MODEL_PARAM:
+            self._robot.robot_body.set_trigon_model_params(*robot_action)
+
         else:
             raise RuntimeError('Unrecognised action mode.')
 
-        self._robot.auxiliary_equip.set_camera_state(auxiliary_action)
+        # self._robot.auxiliary_equip.set_camera_state(auxiliary_action)
 
         self._scene.step()
         self._time_step += 1
 
-        success, terminate = self._task.success()
-        reward = self._task.get_reward()
-        if success != 0:
-            reward = 100
-        if self._time_step >= self._task.get_epi_len():     # timeout
-            terminate = True
+        timeout_terminate = False
+        success, success_terminate = self._task.success()
+        fail, fail_terminate = self._task.fail()
+        done = success_terminate | fail_terminate
+        if self._time_step % 10 == 0 and self._time_step != 0:
+            reward = self._task.get_reward()
+        else:
+            reward = 0
+        if success:
+            reward += 100
             self._time_step = 0
+            print('mission success!')
+        if fail:
+            reward += -100
+            self._time_step = 0
+            print('mission fail!')
+        if self._time_step >= self._task.get_epi_len() and not done:     # timeout
+            reward += -10
+            timeout_terminate = True
+            self._time_step = 0
+            print('mission timeout!')
 
-        return self._scene.get_observation(), reward, terminate
+        done |= timeout_terminate
+        return self._scene.get_observation(), reward, done

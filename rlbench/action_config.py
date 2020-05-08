@@ -1,34 +1,38 @@
 from enum import Enum
 
-SNAKE_ROBOT_JOINTS = 17
+SNAKE_ROBOT_JOINTS = 16
+TRIGON_MODEL_PARAMS = 8
 
 
-class SnakeRobotActionMode(Enum):
+class SnakeRobotActionConfig(Enum):
 
-    # Absolute arm joint velocities
+    # Absolute snake robot joint velocities
     ABS_JOINT_VELOCITY = (0, SNAKE_ROBOT_JOINTS,)
 
-    # Change in arm joint velocities
+    # Change in snake robot joint velocities
     DELTA_JOINT_VELOCITY = (1, SNAKE_ROBOT_JOINTS,)
 
-    # Absolute arm joint positions/angles (in radians)
+    # Absolute snake robot joint positions/angles (in radians)
     ABS_JOINT_POSITION = (2, SNAKE_ROBOT_JOINTS,)
 
-    # Change in arm joint positions/angles (in radians)
+    # Change in snake robot joint positions/angles (in radians)
     DELTA_JOINT_POSITION = (3, SNAKE_ROBOT_JOINTS,)
 
-    # Absolute arm joint forces/torques
+    # Absolute snake robot joint forces/torques
     ABS_JOINT_TORQUE = (4, SNAKE_ROBOT_JOINTS,)
 
-    # Change in arm joint forces/torques
+    # Change snake robot arm joint forces/torques
     DELTA_JOINT_TORQUE = (5, SNAKE_ROBOT_JOINTS,)
+
+    # Trigonometric function model parameters
+    TRIGON_MODEL_PARAM = (6, TRIGON_MODEL_PARAMS,)
 
     def __init__(self, id, action_size):
         self.id = id
         self.action_size = action_size
 
 
-class CameraActionMode(Enum):
+class CameraActionConfig(Enum):
     # The open amount (0 >= x <= 1) of the camera. 0 is close, 1 is open.
     OPEN_AMOUNT = (0, 1,)
 
@@ -41,7 +45,7 @@ EE_SIZE = 7
 ARM_JOINTS = 7
 
 
-class ArmActionMode(Enum):
+class ArmActionConfig(Enum):
 
     # Absolute arm joint velocities
     ABS_JOINT_VELOCITY = (0, ARM_JOINTS,)
@@ -78,7 +82,7 @@ class ArmActionMode(Enum):
         self.action_size = action_size
 
 
-class GripperActionMode(Enum):
+class GripperActionConfig(Enum):
 
     # The open amount (0 >= x <= 1) of the gripper. 0 is close, 1 is open.
     OPEN_AMOUNT = (0, 1,)
@@ -88,14 +92,14 @@ class GripperActionMode(Enum):
         self.action_size = action_size
 
 
-class ActionMode(object):
+class ActionConfig(object):
 
     def __init__(self,
-                 robot_action_mode: SnakeRobotActionMode = SnakeRobotActionMode.ABS_JOINT_VELOCITY,
-                 aux_equip_action_mode: CameraActionMode = CameraActionMode.OPEN_AMOUNT):
-        if not (isinstance(robot_action_mode, SnakeRobotActionMode) and
-                isinstance(aux_equip_action_mode, CameraActionMode)):
-            raise NotImplementedError("Not implement for the other action mode except snake robot action mode.")
-        self.robot_action_mode = robot_action_mode
-        self.aux_equip_action_mode = aux_equip_action_mode
-        self.action_size = self.robot_action_mode.action_size
+                 robot_action_config: SnakeRobotActionConfig = SnakeRobotActionConfig.ABS_JOINT_VELOCITY,
+                 aux_equip_action_config: CameraActionConfig = CameraActionConfig.OPEN_AMOUNT):
+        if not (isinstance(robot_action_config, SnakeRobotActionConfig) and
+                isinstance(aux_equip_action_config, CameraActionConfig)):
+            raise NotImplementedError("Not implement for the other action configuration except snake robot action configuration.")
+        self.robot_action_config = robot_action_config
+        self.aux_equip_action_config = aux_equip_action_config
+        self.action_size = self.robot_action_config.action_size

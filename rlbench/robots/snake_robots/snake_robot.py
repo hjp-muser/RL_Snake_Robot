@@ -26,11 +26,21 @@ class SnakeRobot(RobotComponent):
         # handles
         suffix = '' if count == 1 else '#%d' % (count - 2)
         self._snake_head = Dummy('%s_head%s' % (name, suffix))
+        self._snake_tail = Dummy('%s_tail%s' % (name, suffix))
         self._collision_collection = sim.simGetCollectionHandle(
             '%s_collection%s' % (name, suffix))
 
     def get_snake_head(self):
         return self._snake_head
 
+    def get_snake_tail(self):
+        return self._snake_tail
+
     def get_snake_head_pos(self):
         return self._snake_head.get_position()
+
+    def get_snake_tail_pos(self):
+        return self._snake_tail.get_position()
+
+    def init_state(self):
+        pass

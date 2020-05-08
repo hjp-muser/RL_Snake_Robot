@@ -10,7 +10,7 @@ import importlib
 from typing import Type
 from rlbench.observation_config import ObservationConfig
 from rlbench.task_environment import TaskEnvironment
-from rlbench.action_modes import ActionMode, SnakeRobotActionMode
+from rlbench.action_config import ActionConfig, SnakeRobotActionConfig
 
 
 DIR_PATH = dirname(abspath(__file__))
@@ -24,13 +24,13 @@ SUPPORTED_ROBOTS = {
 class Environment(object):
     """Each environment has a scene."""
 
-    def __init__(self, action_mode: ActionMode, dataset_root: str = '',
+    def __init__(self, action_config: ActionConfig, dataset_root: str = '',
                  obs_config=ObservationConfig(), headless=False,
                  static_positions: bool = False,
                  robot_configuration='rattler'):
 
         self._dataset_root = dataset_root
-        self._action_mode = action_mode
+        self._action_config = action_config
         self._obs_config = obs_config
         self._headless = headless
         self._static_positions = static_positions
@@ -49,22 +49,19 @@ class Environment(object):
 
     def _set_control_action(self):
         self._robot.robot_body.set_control_loop_enabled(True)
-        if (self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_JOINT_VELOCITY or
-                self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_JOINT_VELOCITY):
+        if (self._action_config.robot_action_config == SnakeRobotActionConfig.ABS_JOINT_VELOCITY or
+                self._action_config.robot_action_config == SnakeRobotActionConfig.DELTA_JOINT_VELOCITY):
             self._robot.robot_body.set_control_loop_enabled(False)
             self._robot.robot_body.set_motor_locked_at_zero_velocity(True)
-        elif (self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_JOINT_POSITION or
-              self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_JOINT_POSITION or
-              self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_EE_POSE or
-              self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_EE_POSE or
-              self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_EE_VELOCITY or
-              self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_EE_VELOCITY):
+        elif (self._action_config.robot_action_config == SnakeRobotActionConfig.ABS_JOINT_POSITION or
+              self._action_config.robot_action_config == SnakeRobotActionConfig.DELTA_JOINT_POSITION or
+              self._action_config.robot_action_config == SnakeRobotActionConfig.TRIGON_MODEL_PARAM):
             self._robot.robot_body.set_control_loop_enabled(True)
-        elif (self._action_mode.robot_action_mode == SnakeRobotActionMode.ABS_JOINT_TORQUE or
-              self._action_mode.robot_action_mode == SnakeRobotActionMode.DELTA_JOINT_TORQUE):
+        elif (self._action_config.robot_action_config == SnakeRobotActionConfig.ABS_JOINT_TORQUE or
+              self._action_config.robot_action_config == SnakeRobotActionConfig.DELTA_JOINT_TORQUE):
             self._robot.robot_body.set_control_loop_enabled(False)
         else:
-            raise RuntimeError('Unrecognised action mode.')
+            raise RuntimeError('Unrecognised action configuration.')
 
     def _check_dataset_structure(self):
         if len(self._dataset_root) > 0 and not exists(self._dataset_root):
@@ -116,5 +113,5 @@ class Environment(object):
         self._prev_task = task
         return TaskEnvironment(
             self._pyrep, self._robot, self._scene, task,
-            self._action_mode, self._dataset_root, self._obs_config,
+            self._action_config, self._dataset_root, self._obs_config,
             self._static_positions)

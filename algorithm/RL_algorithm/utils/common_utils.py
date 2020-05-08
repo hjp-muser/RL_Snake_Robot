@@ -1,11 +1,12 @@
 import numpy as np
 import random
 
+
 def discount_with_dones(rewards, dones, gamma):
     discounted = []
     r = 0
     for reward, done in zip(rewards[::-1], dones[::-1]):
-        r = reward + gamma*r*(1.-done) # fixed off by one bug
+        r = reward + gamma*r*(1.-done)
         discounted.append(r)
     return discounted[::-1]
 

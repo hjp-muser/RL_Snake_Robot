@@ -1,0 +1,17 @@
+- 每隔10个时间步长才计算奖励。
+- 两种奖励：
+    + 前进的步长，等于上一次距离目标的距离减去当前距离目标的距离（设为r1）
+    + 当前距离目标的距离（设为r2）
+- 两种奖励的耦合方式：r1 + 0.01 / power(r2, 1.8)
+
+**TODO:**
+- 尝试不同奖励训练不同的状态函数。参考文献 [1]
+- 尝试使用熵正则化框架下的强化学习方法，类似 SAC 方法。
+- 尝试自适应添加熵正则项。
+
+
+
+-----
+**参考文献：**
+
+[1] Van Seijen, H., Fatemi, M., Romoff, J., Laroche, R., Barnes, T., & Tsang, J. (2017). Hybrid reward architecture for reinforcement learning. Advances in Neural Information Processing Systems, 2017-Decem(Nips 2017), 5393–5403.
