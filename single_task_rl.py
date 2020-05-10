@@ -18,7 +18,7 @@ class Agent(object):
             if i % 2 == 0:
                 joints[i] = -0.7 * np.sin(2 * self.clk + (i/2) * 30 + 0) + 0
             else:
-                joints[i] = -0.7 * np.sin(3 * self.clk + (i/2) * 30) + 0
+                joints[i] = -0.7 * np.sin(4 * self.clk + (i/2) * 30) + 0
 
         # return (np.random.normal(-0.7, 0.7, size=(self.action_size,))).tolist()
         self.clk += 0.05
@@ -27,11 +27,11 @@ class Agent(object):
 
 obs_config = ObservationConfig()
 obs_config.set_all(False)
-obs_config.head_camera.rgb = True
+obs_config.set_all_low_dim(True)
 
 action_mode = ActionConfig(SnakeRobotActionConfig.ABS_JOINT_POSITION)
 env = Environment(
-    action_mode, obs_config=obs_config, headless=False)
+    action_mode, obs_config=obs_config, headless=True)
 env.launch()
 
 task = env.get_task(ReachTarget)

@@ -143,7 +143,7 @@ def main(args):
         episode_rew = np.zeros(env.num_envs) if isinstance(env, VecEnv) else np.zeros(1)
         while True:
             if state is not None:
-                actions, _, state, _ = model.step(obs, S=state, M=dones)
+                actions, _, state, _ = model.step(obs, state=state, mask=dones)
             else:
                 actions, _, _, _ = model.step(obs)
 
@@ -165,17 +165,17 @@ if __name__ == '__main__':
 
     # A2C
     a2c_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=a2c', '--network=mlp',
-                 '--num_timesteps=3.5e5', '--seed=10', '--gamma=0.9', '--max_grad_norm=2', "--tb_log_path=''"]
+                 '--num_timesteps=3.5e5', '--seed=10', '--gamma=0.9', '--max_grad_norm=2', "--tb_log_path='./a2c'"]
 
-    a2c_play = ['--env=reach_target-state-param-v0', '--alg=./a2c', '--network=mlp', '--num_timesteps=0',
+    a2c_play = ['--env=reach_target-state-param-v0', '--alg=a2c', '--network=mlp', '--num_timesteps=0',
                  '--seed=10', '--play']
     ###########################################################################################################
     # SAC
-    sac_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=sac', '--network=mlp', '--num_timesteps=1e6',
+    sac_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=sac', '--network=lnmlp', '--num_timesteps=1e6',
                 '--seed=10', '--gamma=0.9', '--buffer_size=50000', '--learning_start_threshold=100',
                 '--batch_size=64', '--tau=0.005', "--tensorboard_log_path='./sac'"]
 
-    sac_play = ['--env=reach_target-state-param-v0', '--alg=sac', '--network=mlp', '--num_timesteps=0',
+    sac_play = ['--env=reach_target-state-param-v0', '--alg=sac', '--network=lnmlp', '--num_timesteps=0',
                  '--seed=10', '--play']
 
-    main(sac_args)
+    main(sac_play)

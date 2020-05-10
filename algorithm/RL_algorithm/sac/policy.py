@@ -261,8 +261,10 @@ class FeedForwardPolicy(SACPolicy):
 
     def step(self, obs, state=None, mask=None, deterministic=False):
         if deterministic:
-            return self.sess.run(self.deterministic_policy, {self.obs_ph: obs})
-        return self.sess.run(self.policy, {self.obs_ph: obs})
+            action = self.sess.run(self.deterministic_policy, {self.obs_ph: obs})
+        else:
+            action = self.sess.run(self.policy, {self.obs_ph: obs})
+        return action, None, None, None
 
     def proba_step(self, obs, state=None, mask=None):
         return self.sess.run([self.act_mu, self.std], {self.obs_ph: obs})

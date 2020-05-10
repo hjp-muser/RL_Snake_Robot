@@ -37,7 +37,7 @@ class RLBenchEnv(gym.Env):
         else:
             raise ValueError('Unrecognised action_mode: %s.' % action_mode)
 
-        self.env = Environment(action_config=self.ac_config, obs_config=self.obs_config, headless=True)
+        self.env = Environment(action_config=self.ac_config, obs_config=self.obs_config, headless=False)
         self.env.launch()
         self.task = self.env.get_task(task_class)
 

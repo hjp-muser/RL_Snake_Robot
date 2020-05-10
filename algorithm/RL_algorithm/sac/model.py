@@ -159,6 +159,7 @@ class Model(object):
         self.processed_next_obs_ph = None
         self.log_ent_coef = None
         self.deterministic_action = None
+        self.step = None
 
         self.setup_model()
 
@@ -174,7 +175,7 @@ class Model(object):
                 self.policy = build_policy(self.network, self.sess, self.env.observation_space, self.env.action_space)
                 self.target_policy = build_policy(self.network, self.sess, self.env.observation_space,
                                                   self.env.action_space)
-
+                self.step = self.policy.step
                 # Initialize Placeholders
                 self.observations_ph = self.policy.obs_ph
                 # Normalized observation for pixels
@@ -414,7 +415,7 @@ class Model(object):
                     unscaled_action = np.array([self.env.action_space.sample() for _ in range(self.n_envs)])
                     action = scale_action(self.env.action_space, unscaled_action)
                 else:
-                    action = self.policy.step(obs, deterministic=False)
+                    action, _, _, _ = self.policy.step(obs, deterministic=False)
                     # Add noise to the action (improve exploration,
                     # not needed in general)
                     if self.action_noise is not None:
