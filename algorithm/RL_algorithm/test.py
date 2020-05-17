@@ -1,5 +1,11 @@
-import os
-import sys
+# import os
+# import sys
+# dirpath = os.path.dirname(os.path.abspath(__file__))
+# for _ in range(4):
+#     print(dirpath)
+#     sys.path.append(dirpath)
+#     dirpath = os.path.split(dirpath)[0]
+
 from importlib import import_module
 import os.path as osp
 import numpy as np
@@ -134,7 +140,7 @@ def main(args):
     if args.play:
         logger.log("Running trained model")
         model.load_newest()
-        # model.load_index(2)
+        # model.load_index(10)
         obs = env.reset()
 
         state = model.initial_state if hasattr(model, 'initial_state') else None
@@ -165,17 +171,17 @@ if __name__ == '__main__':
 
     # A2C
     a2c_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=a2c', '--network=mlp',
-                 '--num_timesteps=3.5e5', '--seed=10', '--gamma=0.9', '--max_grad_norm=2', "--tb_log_path='./a2c'"]
+                 '--num_timesteps=5e5', '--seed=10', '--gamma=0.9', '--max_grad_norm=2', "--tb_log_path='./a2c'"]
 
     a2c_play = ['--env=reach_target-state-param-v0', '--alg=a2c', '--network=mlp', '--num_timesteps=0',
                  '--seed=10', '--play']
     ###########################################################################################################
     # SAC
-    sac_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=sac', '--network=lnmlp', '--num_timesteps=1e6',
-                '--seed=10', '--gamma=0.9', '--buffer_size=50000', '--learning_start_threshold=100',
+    sac_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=sac', '--network=mlp', '--num_timesteps=1e6',
+                '--gamma=0.9', '--buffer_size=50000', '--learning_start_threshold=100',
                 '--batch_size=64', '--tau=0.005', "--tensorboard_log_path='./sac'"]
 
-    sac_play = ['--env=reach_target-state-param-v0', '--alg=sac', '--network=lnmlp', '--num_timesteps=0',
+    sac_play = ['--env=reach_target-state-param-v0', '--alg=sac', '--network=mlp', '--num_timesteps=0',
                  '--seed=10', '--play']
 
     main(sac_play)

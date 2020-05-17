@@ -44,7 +44,7 @@ class Model(object):
 
     def __init__(self, network, env, *, seed=None, gamma=0.99, learning_rate=3e-4, learning_rate_scheduler='constant',
                  buffer_size=50000, learning_start_threshold=100, train_freq=1, batch_size=64, tau=0.005,
-                 ent_coef='auto', target_update_interval=10, gradient_steps=1, target_entropy='auto',
+                 ent_coef='auto', target_update_interval=10, gradient_steps=1, target_entropy=10.0,
                  action_noise=None, model_save_path=None, tensorboard_log_path=None):
         """
             Soft Actor-Critic (SAC)
@@ -95,7 +95,7 @@ class Model(object):
 
             :param gradient_steps: (int) How many gradient update after each step
 
-            :param target_entropy: (str or float) target entropy when learning ent_coef (ent_coef = 'auto')
+            :param target_entropy: (float) target entropy when learning ent_coef (ent_coef = 'auto')
 
             :param action_noise: (ActionNoise) the action noise type (None by default), this can help
                     for hard exploration problem. Cf DDPG for the different action noise type.
@@ -172,9 +172,12 @@ class Model(object):
 
             with tf.variable_scope("input", reuse=False):
                 # Create policy and target TF objects
-                self.policy = build_policy(self.network, self.sess, self.env.observation_space, self.env.action_space)
-                self.target_policy = build_policy(self.network, self.sess, self.env.observation_space,
-                                                  self.env.action_space)
+                # self.policy = build_policy(self.network, self.sess, self.env.observation_space, self.env.action_space)
+                # self.target_policy = build_policy(self.network, self.sess, self.env.observation_space,
+                #                                   self.env.action_space)
+                self.policy = MlpPolicy(self.sess, self.env.observation_space, self.env.action_space)
+                self.target_policy = MlpPolicy(self.sess, self.env.observation_space, self.env.action_space)
+
                 self.step = self.policy.step
                 # Initialize Placeholders
                 self.observations_ph = self.policy.obs_ph
@@ -203,15 +206,6 @@ class Model(object):
                                                               create_qf=True, create_vf=True)
                 qf1_pi, qf2_pi, _ = self.policy.make_critics(self.processed_obs_ph, policy_out,
                                                              create_qf=True, create_vf=False, reuse=True)
-
-                # Target entropy is used when learning the entropy coefficient
-                if self.target_entropy == 'auto':
-                    # automatically set target entropy if needed
-                    self.target_entropy = -np.prod(self.env.action_space.shape).astype(np.float32)
-                else:
-                    # Force conversion
-                    # this will also throw an error for unexpected string
-                    self.target_entropy = float(self.target_entropy)
 
                 # The entropy coefficient or entropy can be learned automatically
                 # see Automating Entropy Adjustment for Maximum Entropy RL section
@@ -519,7 +513,8 @@ class Model(object):
             return self
 
     def save(self, save_path):
-        save_variables(save_path=save_path, sess=self.sess)
+        variables = self.params + self.target_params
+        save_variables(save_path=save_path, variables=variables, sess=self.sess)
         print('save model variables to', save_path)
 
     def load_newest(self, load_path=None):
@@ -527,7 +522,8 @@ class Model(object):
         file_list.sort(key=lambda x: os.path.getmtime(os.path.join(self.def_path_pre, x)))
         if load_path is None:
             load_path = os.path.join(self.def_path_pre, file_list[-1])
-        load_variables(load_path=load_path, sess=self.sess)
+        variables = self.params + self.target_params
+        load_variables(load_path=load_path, variables=variables, sess=self.sess)
         print('load_path: ', load_path)
 
     def load_index(self, index, load_path=None):

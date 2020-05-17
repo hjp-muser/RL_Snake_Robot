@@ -11,18 +11,18 @@ LOG_STD_MAX = 2
 LOG_STD_MIN = -20
 
 
-def gaussian_likelihood(input_, mu_, log_std):
+def log_gaussian_likelihood(x, mu, log_std):
     """
     Helper to computer log likelihood of a gaussian.
     Here we assume this is a Diagonal Gaussian.
 
-    :param input_: (tf.Tensor)
-    :param mu_: (tf.Tensor)
+    :param x: (tf.Tensor)
+    :param mu: (tf.Tensor)
     :param log_std: (tf.Tensor)
-    :return: (tf.Tensor)
+    :return: gaussian_prob (tf.Tensor)
     """
-    pre_sum = -0.5 * (((input_ - mu_) / (tf.exp(log_std) + EPS)) ** 2 + 2 * log_std + np.log(2 * np.pi))
-    return tf.reduce_sum(pre_sum, axis=1)
+    log_gaussian_prob = -0.5 * (((x - mu) / (tf.exp(log_std) + EPS)) ** 2 - log_std - 0.5 * np.log(2 * np.pi))
+    return tf.reduce_sum(log_gaussian_prob, axis=1)
 
 
 def gaussian_entropy(log_std):
@@ -35,32 +35,33 @@ def gaussian_entropy(log_std):
     return tf.reduce_sum(log_std + 0.5 * np.log(2.0 * np.pi * np.e), axis=-1)
 
 
-def clip_but_pass_gradient(input_, lower=-1., upper=1.):
-    clip_up = tf.cast(input_ > upper, tf.float32)
-    clip_low = tf.cast(input_ < lower, tf.float32)
-    return input_ + tf.stop_gradient((upper - input_) * clip_up + (lower - input_) * clip_low)
+def clip_but_pass_gradient(x, lower=-1., upper=1.):
+    clip_up = tf.cast(x > upper, tf.float32)
+    clip_low = tf.cast(x < lower, tf.float32)
+    return x + tf.stop_gradient((upper - x) * clip_up + (lower - x) * clip_low)
 
 
-def apply_squashing_func(mu_, pi_, logp_pi):
+def apply_squashing_func(mu, x, logp_pi):
     """
     Squash the output of the Gaussian distribution
     and account for that in the log probability
     The squashed mean is also returned for using
     deterministic actions.
 
-    :param mu_: (tf.Tensor) Mean of the gaussian
-    :param pi_: (tf.Tensor) Output of the policy before squashing
+    :param mu: (tf.Tensor) Mean of the gaussian
+    :param x: (tf.Tensor) Output of the policy before squashing
     :param logp_pi: (tf.Tensor) Log probability before squashing
     :return: ([tf.Tensor])
     """
     # Squash the output
-    deterministic_policy = tf.tanh(mu_)
-    policy = tf.tanh(pi_)
+    deterministic_policy = tf.tanh(mu)
+    policy = tf.tanh(x)
     # OpenAI Variation:
     # To avoid evil machine precision error, strictly clip 1-pi**2 to [0,1] range.
     # logp_pi -= tf.reduce_sum(tf.log(clip_but_pass_gradient(1 - policy ** 2, lower=0, upper=1) + EPS), axis=1)
     # Squash correction (from original implementation)
     logp_pi -= tf.reduce_sum(tf.log(1 - policy ** 2 + EPS), axis=1)  # - tanh'(z) ?
+
     return deterministic_policy, policy, logp_pi
 
 
@@ -195,7 +196,7 @@ class FeedForwardPolicy(SACPolicy):
 
             pi_h = mlp(pi_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
 
-            self.act_mu = mu_ = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
+            self.act_mu = mu = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
             # the std depends on the state, so we cannot use stable_baselines.common.distribution
             # activation = tf.tanh # for log_std
             log_std = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
@@ -212,16 +213,17 @@ class FeedForwardPolicy(SACPolicy):
 
         self.std = std = tf.exp(log_std)
         # Reparameterization trick
-        pi_ = mu_ + tf.random_normal(tf.shape(mu_)) * std
-        logp_pi = gaussian_likelihood(pi_, mu_, log_std)
+        x = mu + tf.random_normal(tf.shape(mu)) * std
+        logp_pi = log_gaussian_likelihood(x, mu, log_std)
         self.entropy = gaussian_entropy(log_std)
         # MISSING: reg params for log and mu
         # Apply squashing and account for it in the probability
-        deterministic_policy, policy, logp_pi = apply_squashing_func(mu_, pi_, logp_pi)
-        self.policy = policy
+        # deterministic_policy, policy, logp_pi = apply_squashing_func(mu, x, logp_pi)
+        deterministic_policy = mu
+        self.policy = x
         self.deterministic_policy = deterministic_policy
 
-        return deterministic_policy, policy, logp_pi
+        return self.deterministic_policy, self.policy, logp_pi
 
     def make_critics(self, obs=None, action=None, reuse=False, scope="values_fn",
                      create_vf=True, create_qf=True):

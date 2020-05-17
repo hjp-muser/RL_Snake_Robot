@@ -1,7 +1,6 @@
 import gym
 from gym import spaces
 from pyrep.const import RenderMode
-from pyrep.objects.dummy import Dummy
 from pyrep.objects.vision_sensor import VisionSensor
 from rlbench.environment import Environment
 from rlbench.action_config import ActionConfig, SnakeRobotActionConfig
@@ -37,7 +36,7 @@ class RLBenchEnv(gym.Env):
         else:
             raise ValueError('Unrecognised action_mode: %s.' % action_mode)
 
-        self.env = Environment(action_config=self.ac_config, obs_config=self.obs_config, headless=False)
+        self.env = Environment(action_config=self.ac_config, obs_config=self.obs_config, headless=True)
         self.env.launch()
         self.task = self.env.get_task(task_class)
 
