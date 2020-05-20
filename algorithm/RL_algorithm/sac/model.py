@@ -172,11 +172,11 @@ class Model(object):
 
             with tf.variable_scope("input", reuse=False):
                 # Create policy and target TF objects
-                # self.policy = build_policy(self.network, self.sess, self.env.observation_space, self.env.action_space)
-                # self.target_policy = build_policy(self.network, self.sess, self.env.observation_space,
-                #                                   self.env.action_space)
-                self.policy = MlpPolicy(self.sess, self.env.observation_space, self.env.action_space)
-                self.target_policy = MlpPolicy(self.sess, self.env.observation_space, self.env.action_space)
+                self.policy = build_policy(self.network, self.sess, self.env.observation_space, self.env.action_space)
+                self.target_policy = build_policy(self.network, self.sess, self.env.observation_space,
+                                                  self.env.action_space)
+                # self.policy = MlpPolicy(self.sess, self.env.observation_space, self.env.action_space)
+                # self.target_policy = MlpPolicy(self.sess, self.env.observation_space, self.env.action_space)
 
                 self.step = self.policy.step
                 # Initialize Placeholders

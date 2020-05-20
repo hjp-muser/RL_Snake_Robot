@@ -161,9 +161,9 @@ class FeedForwardPolicy(SACPolicy):
     :param kwargs: (dict) Extra keyword arguments for the nature CNN feature extraction
     """
 
-    def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None, reuse=False, layers=None,
-                 cnn_extractor=nature_cnn, feature_extraction="cnn", reg_weight=0.0,
-                 layer_norm=False, act_fun=tf.nn.relu, **kwargs):
+    def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None,
+                 reuse=False, layers=None, cnn_extractor=nature_cnn, feature_extraction="cnn",
+                 reg_weight=0.0, layer_norm=False, act_fns=None, **kwargs):
         super(FeedForwardPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
                                                 reuse=reuse, scale=(feature_extraction == "cnn"))
 
@@ -173,16 +173,48 @@ class FeedForwardPolicy(SACPolicy):
         self.cnn_kwargs = kwargs
         self.cnn_extractor = cnn_extractor
         self.reuse = reuse
-        if layers is None:
-            layers = [256, 128, 64]
-        self.layers = layers
-        self.reg_loss = None
         self.reg_weight = reg_weight
+        self.reg_loss = None
         self.entropy = None
 
-        assert len(layers) >= 1, "Error: must have at least one hidden layer for the policy."
+        if layers is None:
+            layers = {'pi': [256, 128, 64], 'vf': [256, 128, 128]}
+        self.layers = layers
+        if isinstance(self.layers, list):
+            assert len(self.layers) >= 1, "Error: must have at least one hidden layer for the policy."
+        elif isinstance(self.layers, dict):
+            assert len(self.layers['pi']) >= 1, "Error: pi network must have at least one hidden layer for the policy."
+            assert len(self.layers['vf']) >= 1, "Error: value network must have at least one hidden layer for the policy."
+        else:
+            raise TypeError("The type of layers must be list or dict.")
 
-        self.activ_fn = act_fun
+        if act_fns is None:
+            if isinstance(layers, list):
+                act_fns = [tf.nn.relu, tf.nn.tanh, tf.nn.relu]
+            elif isinstance(layers, dict):
+                act_fns = {'pi': [tf.nn.relu, tf.nn.tanh, tf.nn.tanh], 'vf': [tf.nn.relu, tf.nn.tanh, tf.nn.relu]}
+        self.activ_fns = act_fns
+        if callable(self.activ_fns):
+            if isinstance(self.layers, list):
+                self.activ_fns = []
+                for _ in range(len(self.layers)):
+                    self.activ_fns.append(act_fns)
+            elif isinstance(self.layers, dict):
+                self.activ_fns = {'pi': [], 'vf': []}
+                for _ in range(len(self.layers)):
+                    self.activ_fns['pi'].append(act_fns)
+                    self.activ_fns['vf'].append(act_fns)
+        else:
+            assert isinstance(self.activ_fns, type(self.layers)), "Error: if act_fns is not a callable function, " \
+                                                                  "it must have the same type as the variable layers"
+            if isinstance(self.activ_fns, list):
+                assert len(self.activ_fns) == len(self.layers), "Error: The number of activation functions must " \
+                                                                "equal to that of layers."
+            elif isinstance(self.activ_fns, dict):
+                assert len(self.activ_fns['pi']) == len(self.layers['pi']), "Error: The number of activation functions " \
+                                                                            "must equal to that of layers"
+                assert len(self.activ_fns['vf']) == len(self.layers['vf']), "Error: The number of activation functions " \
+                                                                            "must equal to that of layers"
 
     def make_actor(self, obs=None, reuse=False, scope="pi"):
         if obs is None:
@@ -194,7 +226,10 @@ class FeedForwardPolicy(SACPolicy):
             else:
                 pi_h = tf.layers.flatten(obs)
 
-            pi_h = mlp(pi_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
+            if isinstance(self.layers, list):
+                pi_h = mlp(pi_h, self.layers, self.activ_fns, layer_norm=self.layer_norm)
+            elif isinstance(self.layers, dict):
+                pi_h = mlp(pi_h, self.layers['pi'], self.activ_fns['pi'], layer_norm=self.layer_norm)
 
             self.act_mu = mu = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
             # the std depends on the state, so we cannot use stable_baselines.common.distribution
@@ -226,7 +261,7 @@ class FeedForwardPolicy(SACPolicy):
         return self.deterministic_policy, self.policy, logp_pi
 
     def make_critics(self, obs=None, action=None, reuse=False, scope="values_fn",
-                     create_vf=True, create_qf=True):
+                     create_vf=True, create_qf=True, double_qf=True):
         if obs is None:
             obs = self.processed_obs
 
@@ -239,7 +274,10 @@ class FeedForwardPolicy(SACPolicy):
             if create_vf:
                 # Value function
                 with tf.variable_scope('vf', reuse=reuse):
-                    vf_h = mlp(critics_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
+                    if isinstance(self.layers, list):
+                        vf_h = mlp(critics_h, self.layers, self.activ_fns, layer_norm=self.layer_norm)
+                    elif isinstance(self.layers, dict):
+                        vf_h = mlp(critics_h, self.layers['vf'], self.activ_fns['vf'], layer_norm=self.layer_norm)
                     value_fn = tf.layers.dense(vf_h, 1, name="vf")
                 self.value_fn = value_fn
 
@@ -249,15 +287,20 @@ class FeedForwardPolicy(SACPolicy):
 
                 # Double Q values to reduce overestimation
                 with tf.variable_scope('qf1', reuse=reuse):
-                    qf1_h = mlp(qf_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
+                    if isinstance(self.layers, list):
+                        qf1_h = mlp(qf_h, self.layers, self.activ_fns, layer_norm=self.layer_norm)
+                    elif isinstance(self.layers, dict):
+                        qf1_h = mlp(qf_h, self.layers['vf'], self.activ_fns['vf'], layer_norm=self.layer_norm)
                     qf1 = tf.layers.dense(qf1_h, 1, name="qf1")
-
-                with tf.variable_scope('qf2', reuse=reuse):
-                    qf2_h = mlp(qf_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
-                    qf2 = tf.layers.dense(qf2_h, 1, name="qf2")
-
                 self.qf1 = qf1
-                self.qf2 = qf2
+                if double_qf:
+                    with tf.variable_scope('qf2', reuse=reuse):
+                        if isinstance(self.layers, list):
+                            qf2_h = mlp(qf_h, self.layers, self.activ_fns, layer_norm=self.layer_norm)
+                        elif isinstance(self.layers, dict):
+                            qf2_h = mlp(qf_h, self.layers['vf'], self.activ_fns['vf'], layer_norm=self.layer_norm)
+                        qf2 = tf.layers.dense(qf2_h, 1, name="qf2")
+                    self.qf2 = qf2
 
         return self.qf1, self.qf2, self.value_fn
 

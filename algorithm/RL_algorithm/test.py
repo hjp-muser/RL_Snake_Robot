@@ -177,11 +177,11 @@ if __name__ == '__main__':
                  '--seed=10', '--play']
     ###########################################################################################################
     # SAC
-    sac_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=sac', '--network=mlp', '--num_timesteps=1e6',
+    sac_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=sac', '--network=mlp', '--num_timesteps=5e5',
                 '--gamma=0.9', '--buffer_size=50000', '--learning_start_threshold=100',
                 '--batch_size=64', '--tau=0.005', "--tensorboard_log_path='./sac'"]
 
     sac_play = ['--env=reach_target-state-param-v0', '--alg=sac', '--network=mlp', '--num_timesteps=0',
                  '--seed=10', '--play']
 
-    main(sac_play)
+    main(a2c_args)

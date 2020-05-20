@@ -42,13 +42,13 @@ def ortho_init(scale=1.0):
     return _ortho_init
 
 
-def mlp(input_tensor, layers, activ_fn=tf.nn.relu, layer_norm=False):
+def mlp(input_tensor, layers, activ_fn, layer_norm=False):
     """
     Create a multi-layer fully connected neural network.
 
     :param input_tensor: (tf.placeholder)
     :param layers: ([int]) Network architecture
-    :param activ_fn: (tf.function) Activation function
+    :param activ_fn: (tf.function or [tf.function]) Activation function
     :param layer_norm: (bool) Whether to apply layer normalization or not
     :return: (tf.Tensor)
     """
@@ -57,7 +57,8 @@ def mlp(input_tensor, layers, activ_fn=tf.nn.relu, layer_norm=False):
         output = tf.layers.dense(output, layer_size, name='fc' + str(i))
         if layer_norm:
             output = tf.contrib.layers.layer_norm(output, center=True, scale=True)
-        output = activ_fn(output)
+        output = activ_fn[i](output)
+
     return output
 
 

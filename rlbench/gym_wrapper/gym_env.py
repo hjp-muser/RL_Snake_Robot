@@ -47,8 +47,10 @@ class RLBenchEnv(gym.Env):
                 low=-1.7, high=1.7, shape=(self.ac_config.action_size,),
                 dtype=np.float32)
         elif action_mode == 'trigon':
-            low = np.array([1.0, 3.0, -50, -10, -0.8, -0.8, -0.1, -0.1])
-            high = np.array([3.0, 5.0, 50, 10, 0.8, 0.8, 0.1, 0.1])
+            # low = np.array([-0.8, -0.8, 0.0, 1.0, 3.0, -50, -10, -0.1, -0.1])
+            # high = np.array([0.8, 0.8, 1.0, 3.0, 5.0, 50, 10, 0.1, 0.1])
+            low = np.array([-0.8, -0.8, -1.0, 1.0])
+            high = np.array([0.8, 0.8, 1.0, 3.0])
             self.action_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
         if observation_mode == 'state':

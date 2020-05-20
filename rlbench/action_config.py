@@ -1,7 +1,7 @@
 from enum import Enum
 
 SNAKE_ROBOT_JOINTS = 16
-TRIGON_MODEL_PARAMS = 8
+TRIGON_MODEL_PARAMS = 4
 
 
 class SnakeRobotActionConfig(Enum):

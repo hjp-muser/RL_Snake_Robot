@@ -102,29 +102,41 @@ class Scene(object):
             head_camera_rgb=(
                 hc_ob.rgb_noise.apply(
                     self._head_camera.capture_rgb())
-                if hc_ob.rgb else None),
+                if hc_ob.rgb else None
+            ),
             head_camera_depth=(
                 hc_ob.depth_noise.apply(
                     self._head_camera.capture_depth())
-                if hc_ob.depth else None),
+                if hc_ob.depth else None
+            ),
             head_camera_mask=(
                 self._head_camera.mask().capture_rgb()
-                if hc_ob.mask else None),
+                if hc_ob.mask else None
+            ),
             joint_velocities=(
                 self._obs_config.joint_velocities_noise.apply(
                     np.array(self._snake_robot.get_joint_velocities()))
-                if self._obs_config.joint_velocities else None),
+                if self._obs_config.joint_velocities else None
+            ),
             joint_positions=(
                 self._obs_config.joint_positions_noise.apply(
                     np.array(self._snake_robot.get_joint_positions()))
-                if self._obs_config.joint_positions else None),
+                if self._obs_config.joint_positions else None
+            ),
             joint_forces=joint_forces,
-            snake_head_pose=(
-                np.array(snake_head.get_pose())
-                if self._obs_config.snake_head_pose else None),
+            robot_pos=(
+                np.array(snake_head.get_position())
+                if self._obs_config.robot_pos else None
+            ),
+            target_pos=(
+                np.array(self._active_task.get_target_pos())
+                if self._obs_config.target_pos else None
+            ),
             task_low_dim_state=(
                 self._active_task.get_low_dim_state() if
-                self._obs_config.task_low_dim_state else None))
+                self._obs_config.task_low_dim_state else None
+            )
+        )
         obs = self._active_task.decorate_observation(obs)
         return obs
 

@@ -74,3 +74,7 @@ class ReachTarget(Task):
 
     def get_epi_len(self) -> int:
         return self._epi_len
+
+    def get_target_pos(self) -> List[float]:
+        return self.target.get_position()
+

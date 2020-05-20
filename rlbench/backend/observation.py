@@ -11,7 +11,8 @@ class Observation(object):
                  joint_velocities: np.ndarray,
                  joint_positions:  np.ndarray,
                  joint_forces: np.ndarray,
-                 snake_head_pose:  np.ndarray,
+                 robot_pos:  np.ndarray,
+                 target_pos: np.ndarray,
                  task_low_dim_state: np.ndarray):
         self.head_camera_rgb = head_camera_rgb
         self.head_camera_depth = head_camera_depth
@@ -19,7 +20,8 @@ class Observation(object):
         self.joint_velocities = joint_velocities
         self.joint_positions = joint_positions
         self.joint_forces = joint_forces
-        self.snake_head_pose = snake_head_pose
+        self.robot_pos = robot_pos
+        self.target_pos = target_pos
         self.task_low_dim_state = task_low_dim_state
 
     def get_low_dim_data(self) -> np.ndarray:
@@ -30,7 +32,7 @@ class Observation(object):
         low_dim_data = []
         for data in [self.joint_velocities, self.joint_positions,
                      self.joint_forces,
-                     self.snake_head_pose, self.task_low_dim_state]:
+                     self.robot_pos, self.task_low_dim_state]:
             if data is not None:
                 low_dim_data.append(data)
         return np.concatenate(low_dim_data)

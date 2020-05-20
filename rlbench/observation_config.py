@@ -28,13 +28,14 @@ class CameraConfig(object):
 class ObservationConfig(object):
     def __init__(self,
                  head_camera: CameraConfig = None,
-                 joint_velocities=True,
+                 joint_velocities=False,
                  joint_velocities_noise: NoiseModel = Identity(),
-                 joint_positions=True,
+                 joint_positions=False,
                  joint_positions_noise: NoiseModel = Identity(),
-                 joint_forces=True,
+                 joint_forces=False,
                  joint_forces_noise: NoiseModel = Identity(),
-                 snake_head_pose=False,
+                 robot_pos=False,
+                 target_pos=False,
                  task_low_dim_state=False,
                  ):
         self.head_camera = (CameraConfig() if head_camera is None else head_camera)
@@ -44,7 +45,8 @@ class ObservationConfig(object):
         self.joint_positions_noise = joint_positions_noise
         self.joint_forces = joint_forces
         self.joint_forces_noise = joint_forces_noise
-        self.snake_head_pose = snake_head_pose
+        self.robot_pos = robot_pos
+        self.target_pos = target_pos
         self.task_low_dim_state = task_low_dim_state
 
     def set_all(self, value: bool):
@@ -58,6 +60,8 @@ class ObservationConfig(object):
         # self.joint_velocities = value
         self.joint_positions = value
         self.joint_forces = value
+        self.robot_pos = value
+        self.target_pos = value
         # self.task_low_dim_state = value
 
     def set_camera_rgb(self, value: bool):
