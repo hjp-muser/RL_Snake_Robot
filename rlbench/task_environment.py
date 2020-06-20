@@ -42,6 +42,20 @@ class TaskEnvironment(object):
         self._reset_called = False
         self._time_step = 0
 
+        self.goal_achieved = False
+        self.endgoal_dim = self._task.endgoal_dim
+        # robot's coordinate (x,y) and positions of all joints
+        self.subgoal_dim = self._task.subgoal_dim
+        self.subgoal_bounds = self._task.subgoal_bounds
+        self.subgoal_bounds_symmetric = self._task.subgoal_bounds_symmetric
+        self.subgoal_offset = self._task.subgoal_offset
+        self.endgoal_thresholds = self._task.endgoal_thresholds
+        self.subgoal_thresholds = self._task.subgoal_thresholds
+        self.get_goal = self._task.get_goal
+        self.episode_len = self._task.episode_len
+        self.project_state_to_subgoal = self._task.project_state_to_subgoal
+        self.project_state_to_endgoal = self._task.project_state_to_endgoal
+
         self._scene.load(self._task)
         self._pyrep.start()
 
@@ -56,7 +70,8 @@ class TaskEnvironment(object):
     def reset(self) -> (List[str], Observation):
         print('Resetting task: %s' % self._task.get_name())
         logging.info('Resetting task: %s' % self._task.get_name())
-
+        self._time_step = 0
+        self.goal_achieved = False
         self._scene.reset()
         try:
             desc = self._scene.init_episode(self._variation_number)
@@ -104,27 +119,23 @@ class TaskEnvironment(object):
 
         if self._action_config.robot_action_config == SnakeRobotActionConfig.ABS_JOINT_VELOCITY:
 
-            self._assert_action_space(robot_action,
-                                      (len(self._robot.robot_body.joints),))
+            self._assert_action_space(robot_action, (len(self._robot.robot_body.joints),))
             self._robot.robot_body.set_joint_target_velocities(robot_action)
 
         elif self._action_config.robot_action_config == SnakeRobotActionConfig.DELTA_JOINT_VELOCITY:
 
-            self._assert_action_space(robot_action,
-                                      (len(self._robot.robot_body.joints),))
+            self._assert_action_space(robot_action, (len(self._robot.robot_body.joints),))
             cur = np.array(self._robot.robot_body.get_joint_velocities())
             self._robot.robot_body.set_joint_target_velocities(cur + robot_action)
 
         elif self._action_config.robot_action_config == SnakeRobotActionConfig.ABS_JOINT_POSITION:
 
-            self._assert_action_space(robot_action,
-                                      (len(self._robot.robot_body.joints),))
+            self._assert_action_space(robot_action, (len(self._robot.robot_body.joints),))
             self._robot.robot_body.set_joint_target_positions(robot_action)
 
         elif self._action_config.robot_action_config == SnakeRobotActionConfig.DELTA_JOINT_POSITION:
 
-            self._assert_action_space(robot_action,
-                                      (len(self._robot.robot_body.joints),))
+            self._assert_action_space(robot_action, (len(self._robot.robot_body.joints),))
             cur = np.array(self._robot.robot_body.get_joint_positions())
             self._robot.robot_body.set_joint_target_positions(cur + robot_action)
 
@@ -149,28 +160,31 @@ class TaskEnvironment(object):
 
         self._scene.step()
         self._time_step += 1
-
-        timeout_terminate = False
         success, success_terminate = self._task.success()
-        fail, fail_terminate = self._task.fail()
-        done = success_terminate | fail_terminate
+        fail, fail_terminate = self._task.failure()
+        timeout = self._time_step >= self._task.episode_len
+        done = success_terminate | timeout
+        long_term_reward = self._task.get_long_term_reward(timeout)
         if self._time_step % 10 == 0 and self._time_step != 0:
-            reward = self._task.get_reward()
+            short_term_reward = self._task.get_short_term_reward()
         else:
-            reward = 0
-        if success:
-            reward += 100
-            self._time_step = 0
-            print('mission success!')
-        if fail:
-            reward += -100
-            self._time_step = 0
-            print('mission fail!')
-        if self._time_step >= self._task.get_epi_len() and not done:     # timeout
-            reward += -10
-            timeout_terminate = True
-            self._time_step = 0
-            print('mission timeout!')
+            short_term_reward = 0
 
-        done |= timeout_terminate
+        if success:
+            # self._time_step = 0
+            self.goal_achieved = True
+            print('mission success!')
+        elif timeout:
+            # self._time_step = 0
+            if fail:
+                print('mission fail!')
+            else:
+                print('mission timeout!')
+
+        # if multi_scale_reward:
+        #     reward = [short_term_reward, long_term_reward]
+        # else:
+        #     reward = short_term_reward + long_term_reward * 100
+        reward = short_term_reward + long_term_reward * 100
+
         return self._scene.get_observation(), reward, done

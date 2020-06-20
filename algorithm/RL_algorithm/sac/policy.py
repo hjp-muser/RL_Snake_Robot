@@ -6,9 +6,6 @@ from algorithm.RL_algorithm.utils.tensorflow1.layer_utils import mlp
 from algorithm.RL_algorithm.utils.tensorflow1.policy_utils import BasePolicy, nature_cnn, register_policy
 
 EPS = 1e-6  # Avoid NaN (prevents division by zero or log of zero)
-# CAP the standard deviation of the actor
-LOG_STD_MAX = 2
-LOG_STD_MIN = -20
 
 
 def log_gaussian_likelihood(x, mu, log_std):
@@ -98,7 +95,7 @@ class SACPolicy(BasePolicy):
         :param obs: (TensorFlow Tensor) The observation placeholder (can be None for default placeholder)
         :param reuse: (bool) whether or not to reuse parameters
         :param scope: (str) the scope name of the actor
-        :return: (TensorFlow Tensor) the output tensor
+        :return: ([tf.Tensor]) Mean, action and log probability
         """
         raise NotImplementedError
 
@@ -113,7 +110,7 @@ class SACPolicy(BasePolicy):
         :param scope: (str) the scope name
         :param create_vf: (bool) Whether to create Value fn or not
         :param create_qf: (bool) Whether to create Q-Values fn or not
-        :return: ([tf.Tensor]) Mean, action and log probability
+        :return: (TensorFlow Tensor) the output tensor
         """
         raise NotImplementedError
 
@@ -161,60 +158,67 @@ class FeedForwardPolicy(SACPolicy):
     :param kwargs: (dict) Extra keyword arguments for the nature CNN feature extraction
     """
 
-    def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None,
-                 reuse=False, layers=None, cnn_extractor=nature_cnn, feature_extraction="cnn",
-                 reg_weight=0.0, layer_norm=False, act_fns=None, **kwargs):
+    def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None, reuse=False,
+                 layers=None, act_fns=None, cnn_extractor=nature_cnn, feature_extraction="cnn",
+                 reg_weight=0.0, layer_norm=False, **kwargs):
         super(FeedForwardPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
                                                 reuse=reuse, scale=(feature_extraction == "cnn"))
 
         self._kwargs_check(feature_extraction, kwargs)
-        self.layer_norm = layer_norm
+
         self.feature_extraction = feature_extraction
-        self.cnn_kwargs = kwargs
         self.cnn_extractor = cnn_extractor
-        self.reuse = reuse
+        self.cnn_kwargs = kwargs
+        self.layer_norm = layer_norm
         self.reg_weight = reg_weight
         self.reg_loss = None
         self.entropy = None
 
         if layers is None:
-            layers = {'pi': [256, 128, 64], 'vf': [256, 128, 128]}
-        self.layers = layers
+            self.layers = {'pi': [256, 128, 64], 'vf': [256, 128, 128]}
+        else:
+            self.layers = layers
         if isinstance(self.layers, list):
             assert len(self.layers) >= 1, "Error: must have at least one hidden layer for the policy."
         elif isinstance(self.layers, dict):
+            assert isinstance(self.layers['pi'], list), "Error: the type of value must be list."
+            assert isinstance(self.layers['vf'], list), "Error: the type of value must be list."
             assert len(self.layers['pi']) >= 1, "Error: pi network must have at least one hidden layer for the policy."
             assert len(self.layers['vf']) >= 1, "Error: value network must have at least one hidden layer for the policy."
         else:
             raise TypeError("The type of layers must be list or dict.")
 
-        if act_fns is None:
-            if isinstance(layers, list):
-                act_fns = [tf.nn.relu, tf.nn.tanh, tf.nn.relu]
-            elif isinstance(layers, dict):
-                act_fns = {'pi': [tf.nn.relu, tf.nn.tanh, tf.nn.tanh], 'vf': [tf.nn.relu, tf.nn.tanh, tf.nn.relu]}
-        self.activ_fns = act_fns
+        if layers is None:
+            self.activ_fns = {'pi': [tf.nn.relu, tf.nn.tanh, tf.nn.tanh], 'vf': [tf.nn.relu, tf.nn.tanh, tf.nn.relu]}
+        elif act_fns is None:
+            self.activ_fns = tf.nn.relu
+        else:
+            self.activ_fns = act_fns
         if callable(self.activ_fns):
+            tmp_activ_fns = self.activ_fns
             if isinstance(self.layers, list):
                 self.activ_fns = []
                 for _ in range(len(self.layers)):
-                    self.activ_fns.append(act_fns)
+                    self.activ_fns.append(tmp_activ_fns)
             elif isinstance(self.layers, dict):
                 self.activ_fns = {'pi': [], 'vf': []}
-                for _ in range(len(self.layers)):
-                    self.activ_fns['pi'].append(act_fns)
-                    self.activ_fns['vf'].append(act_fns)
+                for _ in range(len(self.layers['pi'])):
+                    self.activ_fns['pi'].append(tmp_activ_fns)
+                for _ in range(len(self.layers['vf'])):
+                    self.activ_fns['vf'].append(tmp_activ_fns)
         else:
             assert isinstance(self.activ_fns, type(self.layers)), "Error: if act_fns is not a callable function, " \
-                                                                  "it must have the same type as the variable layers"
+                                                                  "it must have the same type as the variable layers."
             if isinstance(self.activ_fns, list):
                 assert len(self.activ_fns) == len(self.layers), "Error: The number of activation functions must " \
-                                                                "equal to that of layers."
+                                                                "be equal to that of layers."
             elif isinstance(self.activ_fns, dict):
+                assert isinstance(self.activ_fns['pi'], list), "Error: the type of dict value must be list."
+                assert isinstance(self.activ_fns['vf'], list), "Error: the type of dict value must be list."
                 assert len(self.activ_fns['pi']) == len(self.layers['pi']), "Error: The number of activation functions " \
-                                                                            "must equal to that of layers"
+                                                                            "must be equal to that of layers."
                 assert len(self.activ_fns['vf']) == len(self.layers['vf']), "Error: The number of activation functions " \
-                                                                            "must equal to that of layers"
+                                                                            "must be equal to that of layers."
 
     def make_actor(self, obs=None, reuse=False, scope="pi"):
         if obs is None:
@@ -231,7 +235,7 @@ class FeedForwardPolicy(SACPolicy):
             elif isinstance(self.layers, dict):
                 pi_h = mlp(pi_h, self.layers['pi'], self.activ_fns['pi'], layer_norm=self.layer_norm)
 
-            self.act_mu = mu = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
+            self.act_mu = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
             # the std depends on the state, so we cannot use stable_baselines.common.distribution
             # activation = tf.tanh # for log_std
             log_std = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
@@ -244,19 +248,20 @@ class FeedForwardPolicy(SACPolicy):
         # OpenAI Variation to cap the standard deviation
         # log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)
         # Original Implementation
+        # CAP the standard deviation of the actor
+        LOG_STD_MAX = 2
+        LOG_STD_MIN = -20
         log_std = tf.clip_by_value(log_std, LOG_STD_MIN, LOG_STD_MAX)
 
         self.std = std = tf.exp(log_std)
         # Reparameterization trick
-        x = mu + tf.random_normal(tf.shape(mu)) * std
-        logp_pi = log_gaussian_likelihood(x, mu, log_std)
+        self.policy = self.act_mu + tf.random_normal(tf.shape(self.act_mu)) * std
+        logp_pi = log_gaussian_likelihood(self.policy, self.act_mu, log_std)
+        self.deterministic_policy = self.act_mu
         self.entropy = gaussian_entropy(log_std)
         # MISSING: reg params for log and mu
         # Apply squashing and account for it in the probability
         # deterministic_policy, policy, logp_pi = apply_squashing_func(mu, x, logp_pi)
-        deterministic_policy = mu
-        self.policy = x
-        self.deterministic_policy = deterministic_policy
 
         return self.deterministic_policy, self.policy, logp_pi
 
@@ -391,7 +396,7 @@ class LnMlpPolicy(FeedForwardPolicy):
                                           feature_extraction="mlp", layer_norm=True, **_kwargs)
 
 
-register_policy("CnnPolicy", CnnPolicy)
-register_policy("LnCnnPolicy", LnCnnPolicy)
-register_policy("MlpPolicy", MlpPolicy)
-register_policy("LnMlpPolicy", LnMlpPolicy)
+register_policy("sac_CnnPolicy", CnnPolicy)
+register_policy("sac_LnCnnPolicy", LnCnnPolicy)
+register_policy("sac_MlpPolicy", MlpPolicy)
+register_policy("sac_LnMlpPolicy", LnMlpPolicy)

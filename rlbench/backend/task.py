@@ -39,6 +39,17 @@ class Task(object):
         self._waypoint_abilities_end = {}
         self._waypoints_should_repeat = lambda: False
 
+        # goal information supplement
+        # planar coordinate (x,y) of the target
+        self.endgoal_dim = None
+        # robot's coordinate (x,y) and positions of all joints
+        self.subgoal_dim = None
+        self.subgoal_bounds = None
+        self.subgoal_bounds_symmetric = None
+        self.subgoal_offset = None
+        self.endgoal_thresholds = None
+        self.subgoal_thresholds = None
+
     ########################
     # Overriding functions #
     ########################
@@ -102,12 +113,30 @@ class Task(object):
         """
         pass
 
-    def get_epi_len(self) -> int:
+    def episode_len(self) -> int:
         """Get the episode length of the specific task"""
         pass
 
     def get_reward(self) -> int:
-        """Get the rewards"""
+        """Get the rewards (duplicate function)"""
+        pass
+
+    def get_goal(self) -> list:
+        """Get the goal space"""
+        pass
+
+    def get_short_term_reward(self) -> int:
+        """Get the short-term rewards"""
+        pass
+
+    def get_long_term_reward(self, timeout) -> int:
+        """Get the long-term rewards"""
+        pass
+
+    def project_state_to_subgoal(self) -> list:
+        pass
+
+    def project_state_to_endgoal(self) -> list:
         pass
 
     @staticmethod
@@ -165,7 +194,7 @@ class Task(object):
             one_terminate |= terminate
         return all_met, one_terminate
 
-    def fail(self):
+    def failure(self):
         all_met = True
         one_terminate = False
         for cond in self._fail_conditions:

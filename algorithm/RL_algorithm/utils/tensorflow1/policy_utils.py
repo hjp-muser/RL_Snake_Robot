@@ -3,9 +3,10 @@ import tensorflow as tf
 import numpy as np
 from itertools import zip_longest
 
-from gym.spaces import Discrete
+from gym.spaces import Discrete, Tuple, Dict
 
-from algorithm.RL_algorithm.utils.tensorflow1.distribution_utils import make_proba_dist_type, CategoricalProbabilityDistribution, \
+from algorithm.RL_algorithm.utils.tensorflow1.distribution_utils import make_proba_dist_type, \
+    CategoricalProbabilityDistribution, \
     MultiCategoricalProbabilityDistribution, DiagGaussianProbabilityDistribution, BernoulliProbabilityDistribution
 from algorithm.RL_algorithm.utils.tensorflow1.layer_utils import linear, conv, conv_to_fc
 from algorithm.RL_algorithm.utils.tensorflow1.input_utils import observation_input
@@ -35,6 +36,8 @@ class BasePolicy(ABC):
         self.n_env = n_env
         self.n_steps = n_steps
         self.n_batch = n_batch
+        self.ob_space = ob_space
+        self.ac_space = ac_space
         with tf.variable_scope("input", reuse=False):
             if obs_phs is None:
                 self._obs_ph, self._processed_obs = observation_input(ob_space, n_batch, scale=scale)
@@ -43,8 +46,21 @@ class BasePolicy(ABC):
 
             self._action_ph = None
             if add_action_ph:
-                self._action_ph = tf.placeholder(dtype=ac_space.dtype, shape=(n_batch,) + ac_space.shape,
-                                                 name="action_ph")
+                if not isinstance(ac_space, Tuple) and not isinstance(ac_space, Dict):
+                    ac_space_shape = ac_space.sample().shape
+                    self._action_ph = tf.placeholder(dtype=ac_space.dtype, shape=(n_batch,) + ac_space_shape,
+                                                     name="action_ph")
+                elif isinstance(ac_space, Tuple):
+                    sub_ac_space_shape = 0
+                    self._action_ph = []
+                    for sub_ac_space in ac_space:
+                        sub_ac_space_shape = sub_ac_space.sample().shape
+                        sub_ac_ph = tf.placeholder(dtype=tf.float32, shape=(n_batch,) + sub_ac_space_shape,
+                                                         name="action_ph")
+                        self._action_ph.append(sub_ac_ph)
+                else:
+                    raise TypeError
+
         self.sess = sess
         self.reuse = reuse
         self.ob_space = ob_space

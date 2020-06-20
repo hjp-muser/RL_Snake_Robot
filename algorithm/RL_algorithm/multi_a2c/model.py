@@ -7,8 +7,8 @@ import numpy as np
 
 from baselines import logger
 
-from algorithm.RL_algorithm.a2c.policy import MlpPolicy, LnMlpPolicy
-from algorithm.RL_algorithm.a2c.runner import Runner
+from algorithm.RL_algorithm.multi_a2c.policy import MlpPolicy, LnMlpPolicy
+from algorithm.RL_algorithm.multi_a2c.runner import Runner
 from algorithm.RL_algorithm.utils.math_utils import safe_mean, explained_variance
 from algorithm.RL_algorithm.utils.common_utils import set_global_seeds
 from algorithm.RL_algorithm.utils.scheduler import Scheduler
@@ -16,11 +16,11 @@ from algorithm.RL_algorithm.utils.tensorflow1.tf_utils import save_variables, lo
 from algorithm.RL_algorithm.utils.tensorflow1.tb_utils import TensorboardWriter, total_episode_reward_logger
 
 
-def build_policy(network):
+def build_policy(network, sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=False):
     if network == 'mlp':
-        return MlpPolicy
-    elif network == 'lnmlp':  # TODO: NOT WORK
-        return LnMlpPolicy
+        return MlpPolicy(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse)
+    elif network == 'lnmlp':
+        return LnMlpPolicy(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse)
 
 
 class Model(object):
@@ -88,11 +88,12 @@ class Model(object):
 
         """
 
-        self.policy = build_policy(network)
+        self.network = network
         self.env = env
+        self.obs_space = env.observation_space
+        self.ac_space = env.action_space
         self.nenvs = env.num_envs
         self.nsteps = nsteps
-        nbatch = self.nenvs * nsteps
         self.seed = seed
         self.ent_coef = ent_coef
         self.vf_coef = vf_coef
@@ -108,62 +109,97 @@ class Model(object):
         self.sess = get_session()
         self.graph = self.sess.graph
         self.episode_reward = np.zeros((self.nenvs,))
+        self.ac_space_len = []
+        for sub_ac_space in self.ac_space:
+            self.ac_space_len.append(sub_ac_space.sample().shape[0])
 
-        with tf.variable_scope('a2c_model', reuse=tf.AUTO_REUSE):
+        self.step_model = None
+        self.train_model = None
+        self.obs_ph = None
+        self.actions_ph = None
+        self.advances_ph = None
+        self.rewards_ph = None
+        self.learning_rate_ph = None
+        self.policy_loss = None
+        self.value_loss = None
+        self.entropy = None
+        self.total_loss = None
+        self.apply_backprop = None
+        self.lr_schedule = None
+        self.step = None
+        self.value = None
+        self.initial_state = None
+        self.def_path_pre = None
+        self.summary = None
+
+        self.setup_model()
+
+    def setup_model(self):
+        nbatch = self.nenvs * self.nsteps
+        with tf.variable_scope('multi_a2c_model', reuse=tf.AUTO_REUSE):
             # step_model is used for sampling
-            self.step_model = self.policy(self.sess, env.observation_space, env.action_space, self.nenvs, 1, self.nenvs,
-                                          reuse=False)
+            self.step_model = build_policy(self.network, self.sess, self.obs_space, self.ac_space,
+                                           self.nenvs, 1, self.nenvs, reuse=False)
 
             # train_model is used to train our network
-            self.train_model = self.policy(self.sess, env.observation_space, env.action_space, self.nenvs, self.nsteps,
-                                           nbatch, reuse=True)
+            self.train_model = build_policy(self.network, self.sess, self.obs_space, self.ac_space,
+                                            self.nenvs, self.nsteps, nbatch, reuse=True)
 
         with tf.variable_scope('loss', reuse=False):
-            self.action_ph = tf.placeholder(self.train_model.action.dtype, self.train_model.action.shape)
-            self.adv_ph = tf.placeholder(tf.float32, [nbatch])
-            self.reward_ph = tf.placeholder(tf.float32, [nbatch])
-            self.lr_ph = tf.placeholder(tf.float32, [])
+            self.obs_ph = self.train_model.obs_ph
+            self.actions_ph = self.train_model.action_ph
+            self.advances_ph = tf.placeholder(tf.float32, [nbatch])
+            self.rewards_ph = tf.placeholder(tf.float32, [nbatch])
+            self.learning_rate_ph = tf.placeholder(tf.float32, [])
 
             # Calculate the loss
             # Total loss = Policy gradient loss - entropy * entropy coefficient + Value coefficient * value loss
 
             # Policy loss
-            neglogpac = self.train_model.proba_distribution.neglogp(self.action_ph)
+            for sub_id in range(len(self.ac_space)):
+                if sub_id == 0:
+                    neglogpac = self.train_model.pd_list[sub_id].neglogp(self.actions_ph[sub_id])
+                else:
+                    neglogpac += self.train_model.pd_list[sub_id].neglogp(self.actions_ph[sub_id])
             # L = A(s,a) * -logpi(a|s)
-            self.pg_loss = tf.reduce_mean(self.adv_ph * neglogpac)
+            self.policy_loss = tf.reduce_mean(self.advances_ph * neglogpac)
 
             # Entropy is used to improve exploration by limiting the premature convergence to suboptimal policy.
-            self.entropy = tf.reduce_mean(self.train_model.proba_distribution.entropy())
+            for sub_id in range(len(self.ac_space)):
+                if self.entropy is None:
+                    self.entropy = tf.reduce_mean(self.train_model.pd_list[sub_id].entropy())
+                else:
+                    self.entropy += tf.reduce_mean(self.train_model.pd_list[sub_id].entropy())
 
             # Value loss
-            self.vf_loss = losses.mean_squared_error(tf.squeeze(self.train_model.value_fn), self.reward_ph)
+            self.value_loss = losses.mean_squared_error(tf.squeeze(self.train_model.value_fn), self.rewards_ph)
 
-            self.loss = self.pg_loss - self.entropy * ent_coef + self.vf_loss * vf_coef
+            self.total_loss = self.policy_loss - self.entropy * self.ent_coef + self.value_loss * self.vf_coef
 
-            tf.summary.scalar('lr', self.lr_ph)
-            tf.summary.scalar('pg_loss', self.pg_loss)
+            tf.summary.scalar('lr', self.learning_rate_ph)
+            tf.summary.scalar('policy_loss', self.policy_loss)
             tf.summary.scalar('entropy', self.entropy)
-            tf.summary.scalar('vf_loss', self.vf_loss)
-            tf.summary.scalar('loss', self.loss)
+            tf.summary.scalar('value_loss', self.value_loss)
+            tf.summary.scalar('total_loss', self.total_loss)
             tf.summary.histogram('obs', self.train_model.obs_ph)
 
             # Update parameters using loss
             # 1. Get the model parameters
-            params = tf.trainable_variables("a2c_model")
+            params = tf.trainable_variables("multi_a2c_model")
 
             # 2. Calculate the gradients
-            grads = tf.gradients(self.loss, params)
-            if max_grad_norm is not None:
+            grads = tf.gradients(self.total_loss, params)
+            if self.max_grad_norm is not None:
                 # Clip the gradients (normalize)
-                grads, grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
+                grads, grad_norm = tf.clip_by_global_norm(grads, self.max_grad_norm)
             grads = list(zip(grads, params))
 
         # 3. Make op for one policy and value update step of A2C
-        trainer = tf.train.RMSPropOptimizer(learning_rate=self.lr_ph, decay=alpha, epsilon=epsilon)
+        trainer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate_ph, decay=self.alpha, epsilon=self.epsilon)
 
         self.apply_backprop = trainer.apply_gradients(grads)
 
-        self.lr_schedule = Scheduler(initial_value=lr, n_values=total_timesteps, schedule=lrschedule)
+        self.lr_schedule = Scheduler(initial_value=self.lr, n_values=self.total_timesteps, schedule=self.lrschedule)
         self.step = self.step_model.step
         self.value = self.step_model.value
         self.initial_state = self.step_model.initial_state
@@ -179,20 +215,23 @@ class Model(object):
         for step in range(len(obs)):
             cur_lr = self.lr_schedule.value()
 
-        td_map = {self.train_model.obs_ph: obs, self.action_ph: actions, self.adv_ph: advs, self.reward_ph: rewards,
-                  self.lr_ph: cur_lr}
-        if states is not None:  # TODO: what are states?
+        td_map = {self.obs_ph: obs, self.advances_ph: advs,
+                  self.rewards_ph: rewards, self.learning_rate_ph: cur_lr}
+        for sub_id in range(len(self.ac_space)):
+            td_map[self.actions_ph[sub_id]] = actions[sub_id]
+
+        if states is not None:
             td_map[self.train_model.states_ph] = states
             td_map[self.train_model.dones_ph] = masks
 
         if writer is not None:
             summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map
+                [self.summary, self.policy_loss, self.value_loss, self.entropy, self.apply_backprop], td_map
             )
             writer.add_summary(summary, update)
         else:
             policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                [self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map
+                [self.policy_loss, self.value_loss, self.entropy, self.apply_backprop], td_map
             )
         return policy_loss, value_loss, policy_entropy
 
@@ -222,12 +261,10 @@ class Model(object):
         # Start total timer
         tstart = time.time()
 
-        with TensorboardWriter(self.graph, self.tb_log_path, 'A2C') as writer:
+        with TensorboardWriter(self.graph, self.tb_log_path, 'MULTI_A2C') as writer:
             for update in range(1, total_timesteps):
                 if update % learn_frequency != 0:
                     continue
-                # print("begin to learn ...")
-
                 # Get mini batch of experiences
                 obs, states, rewards, masks, actions, values, epinfos = runner.run()
                 policy_loss, value_loss, policy_entropy = self.train(obs, states, rewards, masks, actions, values,

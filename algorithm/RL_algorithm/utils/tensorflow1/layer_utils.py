@@ -42,19 +42,21 @@ def ortho_init(scale=1.0):
     return _ortho_init
 
 
-def mlp(input_tensor, layers, activ_fn, layer_norm=False):
+def mlp(input_tensor, layers, activ_fn, add_fc_id=0, layer_norm=False, use_bias=True):
     """
     Create a multi-layer fully connected neural network.
-
     :param input_tensor: (tf.placeholder)
     :param layers: ([int]) Network architecture
     :param activ_fn: (tf.function or [tf.function]) Activation function
+    :param add_fc_id: the number added to the fc name
     :param layer_norm: (bool) Whether to apply layer normalization or not
+    :param use_bias: use bias or not
     :return: (tf.Tensor)
     """
+
     output = input_tensor
     for i, layer_size in enumerate(layers):
-        output = tf.layers.dense(output, layer_size, name='fc' + str(i))
+        output = tf.layers.dense(output, layer_size, use_bias=use_bias, name='fc' + str(i+add_fc_id))
         if layer_norm:
             output = tf.contrib.layers.layer_norm(output, center=True, scale=True)
         output = activ_fn[i](output)
@@ -108,22 +110,30 @@ def conv(input_tensor, scope, *, n_filters, filter_size, stride,
         return bias + tf.nn.conv2d(input_tensor, weight, strides=strides, padding=pad, data_format=data_format)
 
 
-def linear(input_tensor, scope, n_hidden, *, init_scale=1.0, init_bias=0.0):
+def linear(input_tensor, scope, n_hidden, *, name_id=None, init_scale=1.0, init_bias=0.0, use_bias=True):
     """
     Creates a fully connected layer for TensorFlow
-
     :param input_tensor: (TensorFlow Tensor) The input tensor for the fully connected layer
     :param scope: (str) The TensorFlow variable scope
     :param n_hidden: (int) The number of hidden neurons
+    :param name_id: (int) used to distinguish a different linear model
     :param init_scale: (int) The initialization scale
     :param init_bias: (int) The initialization offset bias
+    :param use_bias: (bool) use bias or not
     :return: (TensorFlow Tensor) fully connected layer
     """
+    if name_id is None:
+        suffix = ''
+    else:
+        suffix = str(name_id)
     with tf.variable_scope(scope):
         n_input = input_tensor.get_shape()[1].value
-        weight = tf.get_variable("w", [n_input, n_hidden], initializer=ortho_init(init_scale))
-        bias = tf.get_variable("b", [n_hidden], initializer=tf.constant_initializer(init_bias))
-        return tf.matmul(input_tensor, weight) + bias
+        weight = tf.get_variable("w"+suffix, [n_input, n_hidden], initializer=ortho_init(init_scale))
+        if use_bias:
+            bias = tf.get_variable("b"+suffix, [n_hidden], initializer=tf.constant_initializer(init_bias))
+            return tf.matmul(input_tensor, weight) + bias
+        else:
+            return tf.matmul(input_tensor, weight)
 
 
 def lstm(input_tensor, mask_tensor, cell_state_hidden, scope, n_hidden, init_scale=1.0, layer_norm=False):

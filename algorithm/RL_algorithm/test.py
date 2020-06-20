@@ -109,7 +109,6 @@ def train(args, extra_args):  # TODO: pretrain
     model_ins = alg_model(
         env=env,
         seed=seed,
-        ent_coef=-0.0005,  # 0.0005
         **alg_kwargs
     )
     model_ins.learn(total_timesteps)
@@ -139,8 +138,8 @@ def main(args):
 
     if args.play:
         logger.log("Running trained model")
-        model.load_newest()
-        # model.load_index(10)
+        # model.load_newest()
+        model.load_index(2)
         obs = env.reset()
 
         state = model.initial_state if hasattr(model, 'initial_state') else None
@@ -168,20 +167,31 @@ def main(args):
 
 
 if __name__ == '__main__':
-
     # A2C
-    a2c_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=a2c', '--network=mlp',
-                 '--num_timesteps=5e5', '--seed=10', '--gamma=0.9', '--max_grad_norm=2', "--tb_log_path='./a2c'"]
+    a2c_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=a2c', '--network=mlp', '--ent_coef=0.0005',
+                '--num_timesteps=1e7', '--seed=10', '--gamma=0.9', '--max_grad_norm=2', "--tb_log_path='./a2c'"]
 
     a2c_play = ['--env=reach_target-state-param-v0', '--alg=a2c', '--network=mlp', '--num_timesteps=0',
-                 '--seed=10', '--play']
+                '--seed=10', '--play']
     ###########################################################################################################
     # SAC
     sac_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=sac', '--network=mlp', '--num_timesteps=5e5',
-                '--gamma=0.9', '--buffer_size=50000', '--learning_start_threshold=100',
+                '--gamma=0.9', '--buffer_size=50000', '--learning_start_threshold=100', "--ent_coef='auto'",
                 '--batch_size=64', '--tau=0.005', "--tensorboard_log_path='./sac'"]
 
     sac_play = ['--env=reach_target-state-param-v0', '--alg=sac', '--network=mlp', '--num_timesteps=0',
-                 '--seed=10', '--play']
+                '--seed=10', '--play']
 
-    main(a2c_args)
+    ###########################################################################################################
+    multi_a2c_args = ['--env=reach_target-state-param-v1', '--num_env=2', '--alg=multi_a2c', '--network=mlp',
+                      '--num_timesteps=1e6', '--seed=10', '--gamma=0.9', '--max_grad_norm=0.2',
+                      '--ent_coef=0.0005', "--tb_log_path='./multi_a2c'"]
+
+    multi_a2c_play = ['--env=reach_target-state-param-v1', '--alg=multi_a2c', '--network=mlp', '--num_timesteps=0',
+                      '--seed=10', '--play']
+
+    ###########################################################################################################
+    hac_args = ['--env=reach_target-state-param-v0', '--alg=hac', '--num_timesteps=1e6', '--seed=10']
+    hac_play = []
+
+    main(hac_args)

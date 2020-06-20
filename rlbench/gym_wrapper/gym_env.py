@@ -13,7 +13,7 @@ class RLBenchEnv(gym.Env):
 
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, task_class, observation_mode='state', action_mode='joint'):
+    def __init__(self, task_class, observation_mode='state', action_mode='joint', multi_action_space=False):
         self._observation_mode = observation_mode
         self.obs_config = ObservationConfig()
         if observation_mode == 'state':
@@ -36,7 +36,7 @@ class RLBenchEnv(gym.Env):
         else:
             raise ValueError('Unrecognised action_mode: %s.' % action_mode)
 
-        self.env = Environment(action_config=self.ac_config, obs_config=self.obs_config, headless=True)
+        self.env = Environment(action_config=self.ac_config, obs_config=self.obs_config, headless=False)
         self.env.launch()
         self.task = self.env.get_task(task_class)
 
@@ -44,14 +44,25 @@ class RLBenchEnv(gym.Env):
 
         if action_mode == 'joint':
             self.action_space = spaces.Box(
-                low=-1.7, high=1.7, shape=(self.ac_config.action_size,),
-                dtype=np.float32)
+                low=-1.7, high=1.7, shape=(self.ac_config.action_size,), dtype=np.float32)
         elif action_mode == 'trigon':
-            # low = np.array([-0.8, -0.8, 0.0, 1.0, 3.0, -50, -10, -0.1, -0.1])
-            # high = np.array([0.8, 0.8, 1.0, 3.0, 5.0, 50, 10, 0.1, 0.1])
-            low = np.array([-0.8, -0.8, -1.0, 1.0])
-            high = np.array([0.8, 0.8, 1.0, 3.0])
-            self.action_space = spaces.Box(low=low, high=high, dtype=np.float32)
+            if multi_action_space:
+                # action_space1 = spaces.MultiBinary(n=1)
+                low1 = np.array([-0.8, -0.8])
+                high1 = np.array([0.8, 0.8])
+                action_space1 = spaces.Box(low=low1, high=high1, dtype=np.float32)
+                # low = np.array([-0.8, -0.8, 1.0, 3.0, -50, -10, -0.1, -0.1])
+                # high = np.array([0.8, 0.8, 3.0, 5.0, 50, 10, 0.1, 0.1])
+                low2 = np.array([1.0])
+                high2 = np.array([3.0])
+                action_space2 = spaces.Box(low=low2, high=high2, dtype=np.float32)
+                self.action_space = spaces.Tuple((action_space1, action_space2))
+            else:
+                # low = np.array([0.0, -0.8, -0.8, 1.0, 3.0, -50, -10, -0.1, -0.1])
+                # high = np.array([1.0, 0.8, 0.8, 3.0, 5.0, 50, 10, 0.1, 0.1])
+                low = np.array([-0.8, -0.8, 1.0])
+                high = np.array([0.8, 0.8,  3.0])
+                self.action_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
         if observation_mode == 'state':
             self.observation_space = spaces.Box(

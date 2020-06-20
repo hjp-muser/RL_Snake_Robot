@@ -43,3 +43,13 @@ for task_file in TASKS:
             'observation_mode': 'state'
         }
     )
+    register(
+        id='%s-state-param-v1' % task_name,
+        entry_point='rlbench.gym_wrapper:RLBenchEnv',
+        kwargs={
+            'task_class': task_class,
+            'action_mode': 'trigon',
+            'observation_mode': 'state',
+            'multi_action_space': True
+        }
+    )
