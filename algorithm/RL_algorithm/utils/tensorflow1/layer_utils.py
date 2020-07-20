@@ -42,7 +42,7 @@ def ortho_init(scale=1.0):
     return _ortho_init
 
 
-def mlp(input_tensor, layers, activ_fn, add_fc_id=0, layer_norm=False, use_bias=True):
+def mlp(input_tensor, layers, activ_fn, add_fc_id=0, layer_norm=False, use_bias=True, kernel_initializer=None, kernel_regularizer=None):
     """
     Create a multi-layer fully connected neural network.
     :param input_tensor: (tf.placeholder)
@@ -51,12 +51,16 @@ def mlp(input_tensor, layers, activ_fn, add_fc_id=0, layer_norm=False, use_bias=
     :param add_fc_id: the number added to the fc name
     :param layer_norm: (bool) Whether to apply layer normalization or not
     :param use_bias: use bias or not
+    :param kernel_initializer: initializer funtion
     :return: (tf.Tensor)
     """
 
     output = input_tensor
+    if kernel_initializer is None:
+        kernel_initializer = tf.random_normal_initializer()
     for i, layer_size in enumerate(layers):
-        output = tf.layers.dense(output, layer_size, use_bias=use_bias, name='fc' + str(i+add_fc_id))
+        output = tf.layers.dense(output, layer_size, use_bias=use_bias, name='fc' + str(i+add_fc_id),
+                                 kernel_initializer=kernel_initializer, kernel_regularizer=kernel_regularizer)
         if layer_norm:
             output = tf.contrib.layers.layer_norm(output, center=True, scale=True)
         output = activ_fn[i](output)

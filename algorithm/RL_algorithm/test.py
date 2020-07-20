@@ -139,7 +139,9 @@ def main(args):
     if args.play:
         logger.log("Running trained model")
         # model.load_newest()
-        model.load_index(2)
+        model.load_index(0)
+        for i in range(len(env.envs)):
+            env.envs[i].load_env_param()
         obs = env.reset()
 
         state = model.initial_state if hasattr(model, 'initial_state') else None
@@ -151,7 +153,7 @@ def main(args):
                 actions, _, state, _ = model.step(obs, state=state, mask=dones)
             else:
                 actions, _, _, _ = model.step(obs)
-
+            # print("actions = ", actions)
             obs, rew, done, _ = env.step(actions)
             episode_rew += rew
             env.render()
@@ -168,16 +170,16 @@ def main(args):
 
 if __name__ == '__main__':
     # A2C
-    a2c_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=a2c', '--network=mlp', '--ent_coef=0.0005',
+    a2c_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=a2c', '--network=mlp', '--ent_coef=0.1',
                 '--num_timesteps=1e7', '--seed=10', '--gamma=0.9', '--max_grad_norm=2', "--tb_log_path='./a2c'"]
 
     a2c_play = ['--env=reach_target-state-param-v0', '--alg=a2c', '--network=mlp', '--num_timesteps=0',
                 '--seed=10', '--play']
     ###########################################################################################################
     # SAC
-    sac_args = ['--env=reach_target-state-param-v0', '--num_env=2', '--alg=sac', '--network=mlp', '--num_timesteps=5e5',
-                '--gamma=0.9', '--buffer_size=50000', '--learning_start_threshold=100', "--ent_coef='auto'",
-                '--batch_size=64', '--tau=0.005', "--tensorboard_log_path='./sac'"]
+    sac_args = ['--env=reach_target-state-param-v0', '--num_env=1', '--alg=sac', '--network=mlp', '--num_timesteps=6e6',
+                '--gamma=0.9', '--buffer_size=50000', '--learning_start_threshold=200', "--ent_coef='auto'",
+                '--batch_size=128', '--tau=0.05'] # , "--tensorboard_log_path='./sac'"
 
     sac_play = ['--env=reach_target-state-param-v0', '--alg=sac', '--network=mlp', '--num_timesteps=0',
                 '--seed=10', '--play']
@@ -194,4 +196,4 @@ if __name__ == '__main__':
     hac_args = ['--env=reach_target-state-param-v0', '--alg=hac', '--num_timesteps=1e6', '--seed=10']
     hac_play = []
 
-    main(hac_args)
+    main(sac_args)

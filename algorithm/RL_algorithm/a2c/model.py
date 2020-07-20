@@ -41,7 +41,7 @@ class Model(object):
     """
 
     def __init__(self, network, env, *, seed=None, nsteps=5, total_timesteps=int(80e6),
-                 vf_coef=0.5, ent_coef=0.01, max_grad_norm=0.5, lr=5e-4, lrschedule='constant',
+                 vf_coef=0.5, ent_coef=0.1, max_grad_norm=0.5, lr=5e-4, lrschedule='constant',
                  gamma=0.99, alpha=0.99, epsilon=1e-5, model_save_path=None, tb_log_path=None):
 
         """
@@ -104,7 +104,7 @@ class Model(object):
         self.total_timesteps = total_timesteps
         self.lrschedule = lrschedule
         self.model_save_path = model_save_path
-        self.tb_log_path = tb_log_path
+        self.tb_log_path = None # tb_log_path
         self.sess = get_session()
         self.graph = self.sess.graph
         self.episode_reward = np.zeros((self.nenvs,))
@@ -138,7 +138,10 @@ class Model(object):
             # Value loss
             self.vf_loss = losses.mean_squared_error(tf.squeeze(self.train_model.value_fn), self.reward_ph)
 
-            self.loss = self.pg_loss - self.entropy * ent_coef + self.vf_loss * vf_coef
+            self.reg_loss = tf.contrib.layers.apply_regularization(tf.contrib.layers.l2_regularizer(0.4),
+                                                         tf.trainable_variables())
+
+            self.loss = self.pg_loss - self.entropy * ent_coef + self.vf_loss * vf_coef + self.reg_loss
 
             tf.summary.scalar('lr', self.lr_ph)
             tf.summary.scalar('pg_loss', self.pg_loss)
@@ -171,19 +174,19 @@ class Model(object):
         self.summary = tf.summary.merge_all()
         tf.global_variables_initializer().run(session=self.sess)
 
-    def train(self, obs, states, rewards, masks, actions, values, update, writer=None):
+    def train(self, obs, rewards, masks, actions, values, update, writer=None):
         # Here we calculate advantage A(s,a) = R + yV(s') - V(s)
         # rewards = R + yV(s')
         cur_lr = None
         advs = rewards - values
-        for step in range(len(obs)):
+        for _ in range(len(obs)):
             cur_lr = self.lr_schedule.value()
 
         td_map = {self.train_model.obs_ph: obs, self.action_ph: actions, self.adv_ph: advs, self.reward_ph: rewards,
                   self.lr_ph: cur_lr}
-        if states is not None:  # TODO: what are states?
-            td_map[self.train_model.states_ph] = states
-            td_map[self.train_model.dones_ph] = masks
+        # if states is not None:  # TODO: what are states?
+        #     td_map[self.train_model.states_ph] = states
+        #     td_map[self.train_model.dones_ph] = masks
 
         if writer is not None:
             summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
@@ -196,7 +199,7 @@ class Model(object):
             )
         return policy_loss, value_loss, policy_entropy
 
-    def learn(self, total_timesteps=int(1e6), log_interval=1000, pretrain_load_path=None, learn_frequency=10):
+    def learn(self, total_timesteps=int(1e6), log_interval=1000, pretrain_load_path=None):
 
         """
         Parameters:
@@ -209,7 +212,9 @@ class Model(object):
         """
 
         set_global_seeds(self.seed)
-
+        # pretrain_load_path="/home/huangjp/CoppeliaSim_Edu_V4_0_0_Ubuntu18_04/programming/RL_Snake_Robot/algorithm/RL_algorithm/a2c/tmp/Y2020M06D29_h19m43s27"
+        # pretrain_load_path="/home/huangjp/CoppeliaSim_Edu_V4_0_0_Ubuntu18_04/programming/RL_Snake_Robot/algorithm/RL_algorithm/a2c/tmp/Y2020M06D29_h20m18s25"
+        # pretrain_load_path="/home/huangjp/CoppeliaSim_Edu_V4_0_0_Ubuntu18_04/programming/RL_Snake_Robot/algorithm/RL_algorithm/a2c/tmp/Y2020M07D11_h18m12s00"
         if pretrain_load_path is not None:
             load_variables(load_path=pretrain_load_path, sess=self.sess)
 
@@ -224,14 +229,13 @@ class Model(object):
 
         with TensorboardWriter(self.graph, self.tb_log_path, 'A2C') as writer:
             for update in range(1, total_timesteps):
-                if update % learn_frequency != 0:
-                    continue
-                # print("begin to learn ...")
+                # if update % learn_frequency != 0:
+                #     runner.run()
+                #     continue
 
                 # Get mini batch of experiences
-                obs, states, rewards, masks, actions, values, epinfos = runner.run()
-                policy_loss, value_loss, policy_entropy = self.train(obs, states, rewards, masks, actions, values,
-                                                                     update, writer)
+                obs, rewards, masks, actions, values, epinfos = runner.run()
+                policy_loss, value_loss, policy_entropy = self.train(obs, rewards, masks, actions, values, update, writer)
                 epinfobuf.extend(epinfos)
                 nseconds = time.time() - tstart
                 # Calculate the fps (frame per second)

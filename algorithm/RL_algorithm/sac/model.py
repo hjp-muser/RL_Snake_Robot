@@ -7,7 +7,7 @@ import tensorflow as tf
 
 from baselines import logger
 
-from algorithm.RL_algorithm.utils.math_utils import safe_mean, unscale_action, scale_action
+from algorithm.RL_algorithm.utils.math_utils import safe_mean
 from algorithm.RL_algorithm.utils.scheduler import Scheduler
 from algorithm.RL_algorithm.utils.tensorflow1.tb_utils import TensorboardWriter
 from algorithm.RL_algorithm.sac.buffer import ReplayBuffer
@@ -42,8 +42,8 @@ class Model(object):
         - control the training and roll-out procedure
     """
 
-    def __init__(self, network, env, *, seed=None, gamma=0.99, learning_rate=3e-4, learning_rate_scheduler='constant',
-                 buffer_size=50000, learning_start_threshold=100, train_freq=1, batch_size=64, tau=0.005,
+    def __init__(self, network, env, *, seed=None, gamma=0.99, learning_rate=0, learning_rate_scheduler='constant',
+                 buffer_size=50000, learning_start_threshold=200, train_freq=1, batch_size=128, tau=0.005,
                  ent_coef='auto', target_update_interval=10, gradient_steps=1, target_entropy=10.0,
                  action_noise=None, model_save_path=None, tensorboard_log_path=None):
         """
@@ -110,11 +110,10 @@ class Model(object):
         self.env = env
         self.n_envs = env.num_envs
         self.gamma = gamma
-        self.learning_rate = learning_rate
+        # self.learning_rate = learning_rate
         # In the original paper, same learning rate is used for all networks
-        # self.policy_lr = learning_rate
-        # self.qf_lr = learning_rate
-        # self.vf_lr = learning_rate
+        self.policy_lr = learning_rate
+        self.value_lr = learning_rate
         self.learning_rate_scheduler = learning_rate_scheduler
         self.buffer_size = buffer_size
         self.learning_start_threshold = learning_start_threshold
@@ -191,7 +190,7 @@ class Model(object):
                 self.rewards_ph = tf.placeholder(tf.float32, shape=(None, 1), name='rewards')
                 self.actions_ph = tf.placeholder(tf.float32, shape=(None,) + self.env.action_space.shape,
                                                  name='actions')
-                self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
+                # self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
 
             with tf.variable_scope("model", reuse=False):
                 # Create the policy
@@ -252,7 +251,7 @@ class Model(object):
                 if not isinstance(self.ent_coef, float):
                     ent_coef_loss = -tf.reduce_mean(
                         self.log_ent_coef * tf.stop_gradient(logp_pi + self.target_entropy))
-                    entropy_optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph)
+                    entropy_optimizer = tf.train.AdamOptimizer(learning_rate=self.policy_lr)
 
                 # Compute the policy loss
                 # Alternative: policy_kl_loss = tf.reduce_mean(logp_pi - min_qf_pi)
@@ -272,16 +271,24 @@ class Model(object):
 
                 values_losses = qf1_loss + qf2_loss + value_loss
 
+                # range_center = (self.env.action_space.low + self.env.action_space.high) / 2
+                # range_half_len = (self.env.action_space.high - self.env.action_space.low) / 2
+                # range_loss = 0.001 * tf.pow((tf.abs(policy_out - range_center) / range_half_len), 5)
+
                 # Policy train op
                 # (has to be separate from value train op, because min_qf_pi appears in policy_loss)
-                policy_optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph)
+                policy_optimizer = tf.train.AdamOptimizer(learning_rate=self.policy_lr)
+                policy_std_optimizer = tf.train.AdamOptimizer(learning_rate=self.policy_lr)
                 policy_train_op = policy_optimizer.minimize(policy_loss,
-                                                            var_list=tf_utils.get_trainable_vars('model/pi'))
+                                                            var_list=tf_utils.get_trainable_vars('model/pi/mu'))
+                policy_std_train_op = policy_std_optimizer.minimize(policy_loss,
+                                                            var_list=tf_utils.get_trainable_vars('model/pi/std'))
+                policy_grad_mu = tf.gradients(policy_loss, tf_utils.get_trainable_vars('model/pi/mu'))
+                policy_grad_std = tf.gradients(policy_loss, tf_utils.get_trainable_vars('model/pi/std'))
 
                 # Value train op
-                value_optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph)
+                value_optimizer = tf.train.AdamOptimizer(learning_rate=self.value_lr)
                 values_params = tf_utils.get_trainable_vars('model/values_fn')
-
                 source_params = tf_utils.get_trainable_vars("model/values_fn/vf")
                 target_params = tf_utils.get_trainable_vars("target/values_fn/vf")
 
@@ -298,14 +305,14 @@ class Model(object):
 
                 # Control flow is used because sess.run otherwise evaluates in nondeterministic order
                 # and we first need to compute the policy action before computing q values losses
-                with tf.control_dependencies([policy_train_op]):
+                with tf.control_dependencies([policy_train_op, policy_std_train_op]):
                     train_values_op = value_optimizer.minimize(values_losses, var_list=values_params)
 
                     self.infos_names = ['policy_loss', 'qf1_loss', 'qf2_loss', 'value_loss', 'entropy']
                     # All ops to call during one training step
-                    self.step_ops = [policy_loss, qf1_loss, qf2_loss,
-                                     value_loss, qf1, qf2, value_fn, logp_pi,
-                                     self.entropy, policy_train_op, train_values_op]
+                    self.step_ops = [policy_loss, qf1_loss, qf2_loss, value_loss,
+                                     qf1, qf2, value_fn, logp_pi, policy_grad_mu, policy_grad_std,
+                                     self.entropy, policy_train_op, policy_std_train_op, train_values_op]
 
                     # Add entropy coefficient optimization operation if needed
                     if ent_coef_loss is not None:
@@ -324,7 +331,7 @@ class Model(object):
                     tf.summary.scalar('ent_coef_loss', ent_coef_loss)
                     tf.summary.scalar('ent_coef', self.ent_coef)
 
-                tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate_ph))
+                # tf.summary.scalar('learning_rate', tf.reduce_mean(self.learning_rate_ph))
 
             # Retrieve parameters that must be saved
             self.params = tf_utils.get_trainable_vars("model")
@@ -337,7 +344,7 @@ class Model(object):
 
             self.summary = tf.summary.merge_all()
 
-    def _train_step(self, step, writer, learning_rate):
+    def _train_step(self, step, writer):
         # Sample a batch from the replay buffer. The 'obs' and 'rewards' in batch are get normalized.
         batch = self.replay_buffer.sample(self.batch_size)
         batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones = batch
@@ -347,7 +354,6 @@ class Model(object):
             self.next_observations_ph: batch_next_obs,
             self.rewards_ph: batch_rewards.reshape(self.batch_size, -1),
             self.terminals_ph: batch_dones.reshape(self.batch_size, -1),
-            self.learning_rate_ph: learning_rate
         }
 
         # out  = [policy_loss, qf1_loss, qf2_loss,
@@ -365,7 +371,13 @@ class Model(object):
         # Unpack to monitor losses and entropy
         policy_loss, qf1_loss, qf2_loss, value_loss, *values = out
         # qf1, qf2, value_fn, logp_pi, entropy, *_ = values
-        entropy = values[4]
+        policy_grad_mu = values[4]
+        policy_grad_std = values[5]
+        entropy = values[6]
+        # print("range_loss = ", range_loss)
+        if step % 500 == 0:
+            print("policy_grad_mu = ", policy_grad_mu[-1])
+            print("policy_grad_std = ", policy_grad_std[-1])
 
         if self.log_ent_coef is not None:
             ent_coef_loss, ent_coef = values[-2:]
@@ -374,6 +386,14 @@ class Model(object):
         return policy_loss, qf1_loss, qf2_loss, value_loss, entropy
 
     def learn(self, total_timesteps=int(1e6), log_interval=4, reset_num_timesteps=True):
+        pretrain_load_path = None
+        # pretrain_load_path="/home/huangjp/CoppeliaSim_Edu_V4_0_0_Ubunt
+        # pretrain_load_path="/home/huangjp/CoppeliaSim_Edu_V4_0_0_Ubunt
+        # pretrain_load_path="/home/huangjp/CoppeliaSim_Edu_V4_0_0_Ubuntu18_04/programming/RL_Snake_Robot/algorithm/RL_algorithm/sac/tmp/Y2020M07D16_h11m15s56"
+        # pretrain_load_path="/home/huangjp/CoppeliaSim_Edu_V4_0_0_Ubuntu18_04/programming/RL_Snake_Robot/algorithm/RL_algorithm/sac/tmp/Y2020M07D16_h18m36s16"
+        if pretrain_load_path is not None:
+            variables = self.params + self.target_params
+            load_variables(load_path=pretrain_load_path, variables=variables, sess=self.sess)
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
 
@@ -381,11 +401,8 @@ class Model(object):
                                new_tb_log=new_tb_log) as writer:
 
             # Transform to callable if needed
-            self.learning_rate_scheduler = Scheduler(initial_value=self.learning_rate, n_values=total_timesteps,
-                                                     schedule=self.learning_rate_scheduler)
-            # Initial learning rate
-            current_lr = self.learning_rate
-
+            # self.learning_rate_scheduler = Scheduler(initial_value=self.learning_rate, n_values=total_timesteps,
+            #                                          schedule=self.learning_rate_scheduler)
             start_time = time.time()
             episode_rewards = [0.0]
             episode_successes = []
@@ -406,20 +423,23 @@ class Model(object):
                     # actions sampled from action space are from range specific to the environment
                     # but algorithm operates on tanh-squashed actions therefore simple scaling is used
 
-                    unscaled_action = np.array([self.env.action_space.sample() for _ in range(self.n_envs)])
-                    action = scale_action(self.env.action_space, unscaled_action)
+                    # action = np.array([self.env.action_space.sample() for _ in range(self.n_envs)])
+                    action = np.array([np.random.random(self.env.action_space.shape) for _ in range(self.n_envs)])
+                    # action = scale_action(self.env.action_space, unscaled_action)
                 else:
                     action, _, _, _ = self.policy.step(obs, deterministic=False)
+                    mu, std = self.policy.proba_step(obs)
+                    if update % 500 == 0:
+                        print("mu = ", mu, " , std = ", std)
                     # Add noise to the action (improve exploration,
                     # not needed in general)
                     if self.action_noise is not None:
-                        action = np.clip(action + self.action_noise(), -1, 1)
+                        action = action + self.action_noise()
                     # inferred actions need to be transformed to environment action_space before stepping
-                    unscaled_action = unscale_action(self.env.action_space, action)
-
+                    # unscaled_action = unscale_action(self.env.action_space, action)
+                # print("action = ", action)
                 assert action[0].shape == self.env.action_space.shape
-
-                new_obs, reward, done, infos = self.env.step(unscaled_action)
+                new_obs, reward, done, infos = self.env.step(action)
                 self.num_timesteps += 1
 
                 # Store only the unnormalized version
@@ -454,9 +474,9 @@ class Model(object):
                             break
                         n_updates += 1
                         # Compute current learning_rate
-                        current_lr = self.learning_rate_scheduler.value()
+                        # current_lr = self.learning_rate_scheduler.value()
                         # Update policy and critics (q functions)
-                        mb_infos_vals.append(self._train_step(update, writer, current_lr))
+                        mb_infos_vals.append(self._train_step(update, writer))
                         # Update target network
                         if (update + grad_step) % self.target_update_interval == 0:
                             # Update target network
@@ -473,6 +493,7 @@ class Model(object):
                     #         self.action_noise.reset()
                     #         obs = self.env.reset()
                     episode_rewards.append(0.0)
+                    print("The first env's reward: ", episode_rewards[-2])
 
                 if len(episode_rewards[-101:-1]) == 0:
                     mean_reward = -np.inf
@@ -489,11 +510,10 @@ class Model(object):
                         logger.record_tabular('ep_rewmean', safe_mean([ep_info['r'] for ep_info in self.ep_info_buf]))
                         logger.record_tabular('ep_lenmean', safe_mean([ep_info['l'] for ep_info in self.ep_info_buf]))
                     logger.record_tabular("n_updates", n_updates)
-                    logger.record_tabular("current_lr", current_lr)
                     logger.record_tabular("fps", fps)
                     logger.record_tabular('time_elapsed', int(time.time() - start_time))
-                    if len(episode_successes) > 0:
-                        logger.record_tabular("success rate", episode_successes / len(episode_rewards))
+                    # if len(episode_successes) > 0:
+                    #     logger.record_tabular("success rate", episode_successes / num_episodes)
                     if len(infos_values) > 0:
                         for (name, val) in zip(self.infos_names, infos_values):
                             logger.record_tabular(name, val)
@@ -502,7 +522,7 @@ class Model(object):
                     # Reset infos:
                     infos_values = []
 
-                if update % 5000 == 0 or update == total_timesteps - 1:
+                if update % 1000 == 0 or update == total_timesteps - 1:
                     if self.model_save_path is None:
                         file_name = time.strftime('Y%YM%mD%d_h%Hm%Ms%S', time.localtime(time.time()))
                         model_save_path = self.def_path_pre + file_name
@@ -531,7 +551,8 @@ class Model(object):
         file_list.sort(key=lambda x: os.path.getmtime(os.path.join(self.def_path_pre, x)), reverse=True)
         if load_path is None:
             load_path = os.path.join(self.def_path_pre, file_list[index])
-        load_variables(load_path=load_path, sess=self.sess)
+        variables = self.params + self.target_params
+        load_variables(load_path=load_path, variables=variables, sess=self.sess)
         print('load_path: ', load_path)
 
     def _init_num_timesteps(self, reset_num_timesteps=True):

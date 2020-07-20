@@ -175,70 +175,90 @@ class FeedForwardPolicy(SACPolicy):
         self.entropy = None
 
         if layers is None:
-            self.layers = {'pi': [256, 128, 64], 'vf': [256, 128, 128]}
+            self.layers = {'mu': [128, 128, 128, 64], 'std': [128, 64, 64], 'vf': [128, 128, 128, 64]}
         else:
             self.layers = layers
-        if isinstance(self.layers, list):
-            assert len(self.layers) >= 1, "Error: must have at least one hidden layer for the policy."
-        elif isinstance(self.layers, dict):
-            assert isinstance(self.layers['pi'], list), "Error: the type of value must be list."
-            assert isinstance(self.layers['vf'], list), "Error: the type of value must be list."
-            assert len(self.layers['pi']) >= 1, "Error: pi network must have at least one hidden layer for the policy."
-            assert len(self.layers['vf']) >= 1, "Error: value network must have at least one hidden layer for the policy."
-        else:
-            raise TypeError("The type of layers must be list or dict.")
+        # if isinstance(self.layers, list):
+        #     assert len(self.layers) >= 1, "Error: must have at least one hidden layer for the policy."
+        # elif isinstance(self.layers, dict):
+        #     assert isinstance(self.layers['pi'], list), "Error: the type of value must be list."
+        #     assert isinstance(self.layers['vf'], list), "Error: the type of value must be list."
+        #     assert len(self.layers['pi']) >= 1, "Error: pi network must have at least one hidden layer for the policy."
+        #     assert len(self.layers['vf']) >= 1, "Error: value network must have at least one hidden layer for the policy."
+        # else:
+        #     raise TypeError("The type of layers must be list or dict.")
 
         if layers is None:
-            self.activ_fns = {'pi': [tf.nn.relu, tf.nn.tanh, tf.nn.tanh], 'vf': [tf.nn.relu, tf.nn.tanh, tf.nn.relu]}
+            self.activ_fns = {'mu': [tf.nn.sigmoid, tf.nn.leaky_relu, tf.nn.leaky_relu, tf.nn.leaky_relu],
+                              'std': [tf.nn.sigmoid, tf.nn.sigmoid, tf.nn.sigmoid],
+                              'vf': [tf.nn.sigmoid, tf.nn.leaky_relu, tf.nn.leaky_relu, tf.nn.sigmoid]}
         elif act_fns is None:
             self.activ_fns = tf.nn.relu
-        else:
-            self.activ_fns = act_fns
-        if callable(self.activ_fns):
-            tmp_activ_fns = self.activ_fns
-            if isinstance(self.layers, list):
-                self.activ_fns = []
-                for _ in range(len(self.layers)):
-                    self.activ_fns.append(tmp_activ_fns)
-            elif isinstance(self.layers, dict):
-                self.activ_fns = {'pi': [], 'vf': []}
-                for _ in range(len(self.layers['pi'])):
-                    self.activ_fns['pi'].append(tmp_activ_fns)
-                for _ in range(len(self.layers['vf'])):
-                    self.activ_fns['vf'].append(tmp_activ_fns)
-        else:
-            assert isinstance(self.activ_fns, type(self.layers)), "Error: if act_fns is not a callable function, " \
-                                                                  "it must have the same type as the variable layers."
-            if isinstance(self.activ_fns, list):
-                assert len(self.activ_fns) == len(self.layers), "Error: The number of activation functions must " \
-                                                                "be equal to that of layers."
-            elif isinstance(self.activ_fns, dict):
-                assert isinstance(self.activ_fns['pi'], list), "Error: the type of dict value must be list."
-                assert isinstance(self.activ_fns['vf'], list), "Error: the type of dict value must be list."
-                assert len(self.activ_fns['pi']) == len(self.layers['pi']), "Error: The number of activation functions " \
-                                                                            "must be equal to that of layers."
-                assert len(self.activ_fns['vf']) == len(self.layers['vf']), "Error: The number of activation functions " \
-                                                                            "must be equal to that of layers."
+        # else:
+        #     self.activ_fns = act_fns
+        # if callable(self.activ_fns):
+        #     tmp_activ_fns = self.activ_fns
+        #     if isinstance(self.layers, list):
+        #         self.activ_fns = []
+        #         for _ in range(len(self.layers)):
+        #             self.activ_fns.append(tmp_activ_fns)
+        #     elif isinstance(self.layers, dict):
+        #         self.activ_fns = {'pi': [], 'vf': []}
+        #         for _ in range(len(self.layers['pi'])):
+        #             self.activ_fns['pi'].append(tmp_activ_fns)
+        #         for _ in range(len(self.layers['vf'])):
+        #             self.activ_fns['vf'].append(tmp_activ_fns)
+        # else:
+        #     assert isinstance(self.activ_fns, type(self.layers)), "Error: if act_fns is not a callable function, " \
+        #                                                           "it must have the same type as the variable layers."
+        #     if isinstance(self.activ_fns, list):
+        #         assert len(self.activ_fns) == len(self.layers), "Error: The number of activation functions must " \
+        #                                                         "be equal to that of layers."
+        #     elif isinstance(self.activ_fns, dict):
+        #         assert isinstance(self.activ_fns['pi'], list), "Error: the type of dict value must be list."
+        #         assert isinstance(self.activ_fns['vf'], list), "Error: the type of dict value must be list."
+        #         assert len(self.activ_fns['pi']) == len(self.layers['pi']), "Error: The number of activation functions " \
+        #                                                                     "must be equal to that of layers."
+        #         assert len(self.activ_fns['vf']) == len(self.layers['vf']), "Error: The number of activation functions " \
+        #                                                                     "must be equal to that of layers."
 
     def make_actor(self, obs=None, reuse=False, scope="pi"):
         if obs is None:
             obs = self.processed_obs
 
+        kernel_regularizer = tf.keras.regularizers.l2(0.3)
         with tf.variable_scope(scope, reuse=reuse):
-            if self.feature_extraction == "cnn":
-                pi_h = self.cnn_extractor(obs, **self.cnn_kwargs)
-            else:
-                pi_h = tf.layers.flatten(obs)
+            with tf.variable_scope("mu", reuse=reuse):
+                if self.feature_extraction == "cnn":
+                    pi_h_mu = self.cnn_extractor(obs, **self.cnn_kwargs)
+                else:
+                    pi_h_mu = tf.layers.flatten(obs)
 
-            if isinstance(self.layers, list):
-                pi_h = mlp(pi_h, self.layers, self.activ_fns, layer_norm=self.layer_norm)
-            elif isinstance(self.layers, dict):
-                pi_h = mlp(pi_h, self.layers['pi'], self.activ_fns['pi'], layer_norm=self.layer_norm)
+                if isinstance(self.layers, list):
+                    pi_h_mu = mlp(pi_h_mu, self.layers, self.activ_fns, layer_norm=self.layer_norm,
+                               kernel_initializer=tf.variance_scaling_initializer(), kernel_regularizer=kernel_regularizer)
+                elif isinstance(self.layers, dict):
+                    pi_h_mu = mlp(pi_h_mu, self.layers['mu'], self.activ_fns['mu'], layer_norm=self.layer_norm,
+                               kernel_initializer=tf.variance_scaling_initializer(), kernel_regularizer=kernel_regularizer)
+                self.act_mu = tf.nn.tanh(tf.layers.dense(pi_h_mu, self.ac_space.shape[0],
+                                                            kernel_initializer=tf.variance_scaling_initializer(),
+                                                            kernel_regularizer=kernel_regularizer))
 
-            self.act_mu = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
-            # the std depends on the state, so we cannot use stable_baselines.common.distribution
-            # activation = tf.tanh # for log_std
-            log_std = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
+            kernel_regularizer = tf.keras.regularizers.l2(0.3)
+            with tf.variable_scope("std", reuse=reuse):
+                if self.feature_extraction == "cnn":
+                    pi_h_std = self.cnn_extractor(obs, **self.cnn_kwargs)
+                else:
+                    pi_h_std = tf.layers.flatten(obs)
+
+                if isinstance(self.layers, list):
+                    pi_h_std = mlp(pi_h_std, self.layers, self.activ_fns, layer_norm=self.layer_norm,
+                               kernel_initializer=tf.variance_scaling_initializer(), kernel_regularizer=kernel_regularizer)
+                elif isinstance(self.layers, dict):
+                    pi_h_std = mlp(pi_h_std, self.layers['std'], self.activ_fns['std'], layer_norm=self.layer_norm,
+                               kernel_initializer=tf.variance_scaling_initializer(), kernel_regularizer=kernel_regularizer)
+                log_std = tf.layers.dense(pi_h_std, self.ac_space.shape[0],
+                            kernel_initializer=tf.variance_scaling_initializer(), kernel_regularizer=kernel_regularizer)
 
         # Regularize policy output (not used for now)
         # reg_loss = self.reg_weight * 0.5 * tf.reduce_mean(log_std ** 2)
@@ -249,10 +269,10 @@ class FeedForwardPolicy(SACPolicy):
         # log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)
         # Original Implementation
         # CAP the standard deviation of the actor
-        LOG_STD_MAX = 2
-        LOG_STD_MIN = -20
-        log_std = tf.clip_by_value(log_std, LOG_STD_MIN, LOG_STD_MAX)
-
+        # LOG_STD_MAX = -10
+        # LOG_STD_MIN = -20
+        # log_std = tf.clip_by_value(log_std, LOG_STD_MIN, LOG_STD_MAX)
+        # log_std = tf.log(self.std)
         self.std = std = tf.exp(log_std)
         # Reparameterization trick
         self.policy = self.act_mu + tf.random_normal(tf.shape(self.act_mu)) * std
@@ -280,9 +300,11 @@ class FeedForwardPolicy(SACPolicy):
                 # Value function
                 with tf.variable_scope('vf', reuse=reuse):
                     if isinstance(self.layers, list):
-                        vf_h = mlp(critics_h, self.layers, self.activ_fns, layer_norm=self.layer_norm)
+                        vf_h = mlp(critics_h, self.layers, self.activ_fns, layer_norm=self.layer_norm,
+                                   kernel_initializer=tf.contrib.layers.variance_scaling_initializer())
                     elif isinstance(self.layers, dict):
-                        vf_h = mlp(critics_h, self.layers['vf'], self.activ_fns['vf'], layer_norm=self.layer_norm)
+                        vf_h = mlp(critics_h, self.layers['vf'], self.activ_fns['vf'], layer_norm=self.layer_norm,
+                                   kernel_initializer=tf.contrib.layers.variance_scaling_initializer())
                     value_fn = tf.layers.dense(vf_h, 1, name="vf")
                 self.value_fn = value_fn
 

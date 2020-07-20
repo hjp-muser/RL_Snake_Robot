@@ -42,5 +42,9 @@ class SnakeRobot(RobotComponent):
     def get_snake_tail_pos(self):
         return self._snake_tail.get_position()
 
+    def get_snake_joints_pos(self):
+        pos = [self.joints[i].get_position() for i in range(self.get_joint_count())]
+        return pos
+
     def init_state(self):
         pass

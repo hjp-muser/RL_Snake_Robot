@@ -394,12 +394,15 @@ class FeedForwardPolicy(ActorCriticPolicy):
 
             self._value_fn = linear(vf_latent, 'vf', 1)
 
-            self._proba_distribution, self._policy, self.q_value = \
-                self.pdtype.proba_distribution_from_latent(pi_latent, vf_latent, init_scale=0.01)
+            mean = linear(pi_latent, 'pi', ac_space.shape[0])
+            logstd = tf.get_variable(name='pi/logstd', shape=[1, ac_space.shape[0]], initializer=tf.random_normal_initializer())
+            pdparam = tf.concat([mean, mean*0.0+logstd], axis=1)
+            self._policy = mean
+            self._proba_distribution = self.pdtype.proba_distribution_from_flat(pdparam)
 
         self._setup_init()
 
-    def step(self, obs, state=None, mask=None, deterministic=False):
+    def step(self, obs, state=None, mask=None, deterministic=True):
         if deterministic:
             action, value, neglogp = self.sess.run([self.deterministic_action, self.value_flat, self.neglogp],
                                                    {self.obs_ph: obs})

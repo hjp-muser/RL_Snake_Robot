@@ -7,6 +7,8 @@ from rlbench.action_config import ActionConfig, SnakeRobotActionConfig
 from rlbench.observation_config import ObservationConfig
 import numpy as np
 
+SKIP_CONTROL = 50
+
 
 class RLBenchEnv(gym.Env):
     """An gym wrapper for RLBench."""
@@ -36,7 +38,7 @@ class RLBenchEnv(gym.Env):
         else:
             raise ValueError('Unrecognised action_mode: %s.' % action_mode)
 
-        self.env = Environment(action_config=self.ac_config, obs_config=self.obs_config, headless=False)
+        self.env = Environment(action_config=self.ac_config, obs_config=self.obs_config, headless=True)
         self.env.launch()
         self.task = self.env.get_task(task_class)
 
@@ -60,13 +62,15 @@ class RLBenchEnv(gym.Env):
             else:
                 # low = np.array([0.0, -0.8, -0.8, 1.0, 3.0, -50, -10, -0.1, -0.1])
                 # high = np.array([1.0, 0.8, 0.8, 3.0, 5.0, 50, 10, 0.1, 0.1])
-                low = np.array([-0.8, -0.8, 1.0])
-                high = np.array([0.8, 0.8,  3.0])
+                low = np.array([-1, -1, -1, -1])
+                high = np.array([1, 1, 1, 1])
+                # low = np.array([1.0])
+                # high = np.array([2.0])
                 self.action_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
         if observation_mode == 'state':
             self.observation_space = spaces.Box(
-                low=-np.inf, high=np.inf, shape=obs.get_low_dim_data().shape)
+                low=-np.inf, high=np.inf, shape=(obs.get_low_dim_data().shape[0]*SKIP_CONTROL,))
         elif observation_mode == 'vision':
             self.observation_space = spaces.Box(
                     low=0, high=1, shape=obs.head_camera_rgb.shape)
@@ -103,13 +107,30 @@ class RLBenchEnv(gym.Env):
             self._gym_cam.set_render_mode(RenderMode.EXTERNAL_WINDOWED)
 
     def reset(self):
+        obs_data_group = []
         descriptions, obs = self.task.reset()
-        del descriptions  # Not used.
-        return self._extract_obs(obs)
+        obs_data = self._extract_obs(obs)
+        for _ in range(SKIP_CONTROL):
+            obs_data_group.extend(obs_data)
+        del descriptions  # Not used
+        return obs_data_group
 
     def step(self, action):
-        obs, reward, terminate = self.task.step(action)
-        return self._extract_obs(obs), reward, terminate, {}
+        obs_data_group = []
+        reward_group = []
+        terminate = False
+        for _ in range(SKIP_CONTROL):
+            obs, reward, step_terminate = self.task.step(action)
+            obs_data = self._extract_obs(obs)
+            obs_data_group.extend(obs_data)
+            reward_group.append(reward)
+            terminate |= step_terminate
+            if terminate:
+                break
+        return obs_data_group, np.mean(reward_group), terminate, {}
 
     def close(self):
         self.env.shutdown()
+
+    def load_env_param(self):
+        self.env.load_env_param()

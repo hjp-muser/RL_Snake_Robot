@@ -36,6 +36,7 @@ class ObservationConfig(object):
                  joint_forces_noise: NoiseModel = Identity(),
                  robot_pos=False,
                  target_pos=False,
+                 target_angle=False,
                  task_low_dim_state=False,
                  ):
         self.head_camera = (CameraConfig() if head_camera is None else head_camera)
@@ -47,6 +48,7 @@ class ObservationConfig(object):
         self.joint_forces_noise = joint_forces_noise
         self.robot_pos = robot_pos
         self.target_pos = target_pos
+        self.target_angle = target_angle
         self.task_low_dim_state = task_low_dim_state
 
     def set_all(self, value: bool):
@@ -59,9 +61,10 @@ class ObservationConfig(object):
     def set_all_low_dim(self, value: bool):
         # self.joint_velocities = value
         self.joint_positions = value
-        self.joint_forces = value
+        # self.joint_forces = value
         self.robot_pos = value
         self.target_pos = value
+        self.target_angle = value
         # self.task_low_dim_state = value
 
     def set_camera_rgb(self, value: bool):

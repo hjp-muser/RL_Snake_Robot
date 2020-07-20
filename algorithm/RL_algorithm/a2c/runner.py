@@ -22,14 +22,15 @@ class Runner(AbstractEnvRunner):
     def run(self):
         # We initialize the lists that will contain the mb of experiences
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones = [], [], [], [], []
-        mb_states = self.states
         epinfos = []
+        actions, values, _, _ = self.model.step(self.obs, mask=self.dones)
+        # print("actions = ", actions)
         for n in range(self.nsteps):
             # Given observations, take action and value (V(s))
             # We already have self.obs because Runner superclass run self.obs[:] = env.reset() on init
-            actions, values, states, _ = self.model.step(self.obs, state=self.states, mask=self.dones)
-
             # Append the experiences
+
+            values = self.model.value(self.obs)
             mb_obs.append(np.copy(self.obs))
             mb_actions.append(actions)
             mb_values.append(values)
@@ -41,7 +42,6 @@ class Runner(AbstractEnvRunner):
                 maybeepinfo = info.get('episode')
                 if maybeepinfo:
                     epinfos.append(maybeepinfo)
-            self.states = states
             self.dones = dones
             self.obs = obs
             mb_rewards.append(rewards)
@@ -58,7 +58,7 @@ class Runner(AbstractEnvRunner):
 
         if self.gamma > 0.0:
             # Discount/bootstrap off value fn
-            last_values = self.model.value(self.obs, state=self.states, mask=self.dones).tolist()
+            last_values = self.model.value(self.obs, mask=self.dones).tolist()
             for n, (rewards, dones, value) in enumerate(zip(mb_rewards, mb_dones, last_values)):
                 rewards = rewards.tolist()
                 dones = dones.tolist()
@@ -74,4 +74,4 @@ class Runner(AbstractEnvRunner):
         mb_rewards = mb_rewards.flatten()
         mb_values = mb_values.flatten()
         mb_masks = mb_masks.flatten()
-        return mb_obs, mb_states, mb_rewards, mb_masks, mb_actions, mb_values, epinfos
+        return mb_obs, mb_rewards, mb_masks, mb_actions, mb_values, epinfos

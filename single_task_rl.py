@@ -14,11 +14,14 @@ class Agent(object):
 
     def act(self, obs):
         joints = np.zeros((self.action_size,))
+        print(self.action_size)
         for i in range(self.action_size):
             if i % 2 == 0:
-                joints[i] = 0.7 * np.sin(-2 * self.clk + (i/2) * 30) + 0
+                # joints[i] = 0.7 * np.sin(2 * self.clk + (i / 2) * 30) + 0
+                joints[i] = 0.8 * np.sin(-2 * self.clk + (i/2) * 30)
             else:
-                joints[i] = 0.7 * np.sin(-4 * self.clk + (i/2) * 30) + 0
+                # joints[i] = 0.7 * np.sin(2 * self.clk + (i/2) * 30 + 12) + 0
+                joints[i] = 0.8 * np.sin(-4 * self.clk + (i/2) * 30)
 
         # return (np.random.normal(-0.7, 0.7, size=(self.action_size,))).tolist()
         self.clk += 0.05
@@ -39,7 +42,7 @@ task = env.get_task(ReachTarget)
 agent = Agent(action_mode.action_size)
 
 training_steps = 2000
-episode_length = 1000
+episode_length = 50
 obs = None
 for i in range(training_steps):
     if i % episode_length == 0:

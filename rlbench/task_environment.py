@@ -165,26 +165,20 @@ class TaskEnvironment(object):
         timeout = self._time_step >= self._task.episode_len
         done = success_terminate | timeout
         long_term_reward = self._task.get_long_term_reward(timeout)
-        if self._time_step % 10 == 0 and self._time_step != 0:
-            short_term_reward = self._task.get_short_term_reward()
-        else:
-            short_term_reward = 0
+        short_term_reward = self._task.get_short_term_reward()
 
         if success:
-            # self._time_step = 0
             self.goal_achieved = True
             print('mission success!')
+        elif fail and done:
+            print('mission fail!')
         elif timeout:
-            # self._time_step = 0
-            if fail:
-                print('mission fail!')
-            else:
-                print('mission timeout!')
+            print('mission timeout!')
 
         # if multi_scale_reward:
         #     reward = [short_term_reward, long_term_reward]
         # else:
         #     reward = short_term_reward + long_term_reward * 100
-        reward = short_term_reward + long_term_reward * 100
+        reward = short_term_reward
 
         return self._scene.get_observation(), reward, done

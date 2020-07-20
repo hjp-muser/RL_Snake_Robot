@@ -1,5 +1,7 @@
 from typing import List
 import numpy as np
+from collections import deque
+
 from pyrep import PyRep
 from pyrep.objects.shape import Shape
 from pyrep.objects.proximity_sensor import ProximitySensor
@@ -8,6 +10,7 @@ from rlbench.backend.robot import Robot
 from rlbench.const import colors
 from rlbench.backend.task import Task
 from rlbench.backend.conditions import DetectedCondition, OutOfBoundCondition
+from rlbench.backend.observation import Observation
 
 
 class ReachTarget(Task):
@@ -16,9 +19,14 @@ class ReachTarget(Task):
         self.target = None
         self.success_sensor = None
         self._epi_len = 1.5e3
-        self._last_tar_pos = None
-        self._last_rob_pos = None
+        self._tar_pos = None
+        self._last_rob_pos_queue = None
+        self.init_tar_rob_dis = None
         self._max_dis = 2
+        self.dis_del_reward_max = None
+        self.dis_del_reward_min = None
+        self.angle_reward_min = None
+        self.angle_reward_max = None
 
         # goal information supplement
         # planar coordinate (x,y) of the target
@@ -29,7 +37,7 @@ class ReachTarget(Task):
         # self.subgoal_bounds = np.concatenate((np.array([-10, 10]), np.array([-10, 10]),
         #                                       [-np.pi/2, np.pi/2] * self.robot.robot_body.get_joint_count()))
         self.subgoal_bounds = np.concatenate((np.array([0, 3]), np.array([-2, 2])))
-        self.subgoal_bounds = np.reshape(self.subgoal_bounds, (-1,2))
+        self.subgoal_bounds = np.reshape(self.subgoal_bounds, (-1, 2))
         self.subgoal_bounds_symmetric = [(self.subgoal_bounds[i][1] - self.subgoal_bounds[i][0])/2
                                          for i in range(self.subgoal_bounds.shape[0])]
         self.subgoal_offset = [self.subgoal_bounds[i][1] - self.subgoal_bounds_symmetric[i]
@@ -38,7 +46,6 @@ class ReachTarget(Task):
         # self.subgoal_thresholds = np.concatenate((np.array([0.3, 0.3]),
         #                                           np.array([np.deg2rad(10)]*self.robot.robot_body.get_joint_count())))
         self.subgoal_thresholds = np.array([0.1, 0.1])
-
 
     def init_task(self) -> None:
         self.target = Shape('target')
@@ -50,22 +57,24 @@ class ReachTarget(Task):
             [OutOfBoundCondition(self.robot.robot_body.get_snake_head(), self.target, self._max_dis)]
         )
 
-
     def init_episode(self, index: int) -> List[str]:
         # set color of the target
         color_name, color_rgb = colors[index]
         self.target.set_color(color_rgb)
 
         # set random position of the target
-        rand_x = np.random.rand()
-        rand_y = np.random.rand()
-        self.target.set_position([rand_x, rand_y, 0.04])
-        self.success_sensor.set_position([rand_x, rand_y, 0.04])
-        # self.target.set_position([0.2, -0.2, 0.04])
-        # self.success_sensor.set_position([0.2, -0.2, 0.04])
+        # rand_x = np.random.rand()
+        # rand_y = np.random.rand()
+        # self.target.set_position([rand_x, rand_y, 0.04])
+        # self.success_sensor.set_position([rand_x, rand_y, 0.04])
+        self.target.set_position([0.2, -0.2, 0.04])
+        self.success_sensor.set_position([0.2, -0.2, 0.04])
 
-        self._last_tar_pos = np.array(self.target.get_position())
-        self._last_rob_pos = np.array(self.robot.get_position())
+        self._tar_pos = np.array(self.target.get_position())
+        self._last_rob_pos_queue = deque(maxlen=50)
+        self._last_rob_pos_queue.append(np.array(self.robot.robot_body.get_snake_head_pos()))
+        cur_age_pos = np.array(self.robot.robot_body.get_snake_head_pos())
+        self.init_tar_rob_dis = np.sqrt(np.sum((self._tar_pos[:2] - cur_age_pos[:2]) ** 2))
 
         self.robot.robot_body.init_state()
 
@@ -81,31 +90,57 @@ class ReachTarget(Task):
         return self.get_target_pos()[:2]
 
     def get_short_term_reward(self) -> int:
-        cur_tar_pos = np.array(self.target.get_position())
-        cur_age_pos = np.array(self.robot.get_position())
-        cur_dis = np.sqrt(np.sum((cur_tar_pos[:2] - cur_age_pos[:2]) ** 2))
-        assert self._last_tar_pos is not None, "The last position of the target is not attached"
-        assert self._last_rob_pos is not None, "The last position of the robot is not attached"
-        last_dis = np.sqrt(np.sum((self._last_tar_pos[:2] - self._last_rob_pos[:2]) ** 2))
-        dis_del = last_dis - cur_dis
-        self._last_rob_pos = cur_age_pos
-        self._last_tar_pos = cur_tar_pos
+        cur_age_pos = np.array(self.robot.robot_body.get_snake_head_pos())
+        cur_dis = np.sqrt(np.sum((self._tar_pos[:2] - cur_age_pos[:2]) ** 2))
+        if len(self._last_rob_pos_queue) == 50:
+            last_rob_pos = self._last_rob_pos_queue[0]
+            last_dis = np.sqrt(np.sum((self._tar_pos[:2] - last_rob_pos[:2]) ** 2))
+            dis_del_reward = last_dis - cur_dis
+        else:
+            dis_del_reward = 0
+        self._last_rob_pos_queue.append(cur_age_pos)
+        if self.dis_del_reward_min is None:
+            self.dis_del_reward_min = dis_del_reward
+            self.dis_del_reward_max = dis_del_reward
+        elif self.dis_del_reward_min > dis_del_reward:
+            self.dis_del_reward_min = dis_del_reward
+        elif self.dis_del_reward_max < dis_del_reward:
+            self.dis_del_reward_max = dis_del_reward
+        if self.dis_del_reward_min != self.dis_del_reward_max:
+            dis_del_reward = (dis_del_reward - self.dis_del_reward_min) / (self.dis_del_reward_max - self.dis_del_reward_min) - 1
 
-        cur_age_head_pos = np.array(self.robot.robot_body.get_snake_head_pos())
-        cur_age_tail_pos = np.array(self.robot.robot_body.get_snake_tail_pos())
-        cur_age_ht_pos = cur_age_head_pos + cur_age_tail_pos
-        cur_block_dis = np.sum(np.abs(cur_tar_pos[:2] - cur_age_ht_pos[:2]))
-        # print('cur_block_dis = ', 0.1 / np.power(cur_block_dis, 1.8))
-        # print('dis_del = ', dis_del)
-        return dis_del + 0.01 / np.power(cur_block_dis, 1.8)
+        k = (cur_age_pos[1] - self._tar_pos[1]) / (cur_age_pos[0] - self._tar_pos[0] + 1e-8)
+        angle_reward = -np.clip(np.abs(np.arctan(k)), 0, 1)
+
+        # if self.angle_reward_min is None:
+        #     self.angle_reward_min = angle_reward
+        #     self.angle_reward_max = angle_reward
+        # elif self.angle_reward_min > angle_reward:
+        #     self.angle_reward_min = angle_reward
+        # elif self.angle_reward_max < angle_reward:
+        #     self.angle_reward_max = angle_reward
+        # if self.angle_reward_min != self.angle_reward_max:
+        #     angle_reward = (angle_reward - self.angle_reward_min) / (self.angle_reward_max - self.angle_reward_min)
+
+        dis_reward = 1 - cur_dis / self.init_tar_rob_dis
+        dis_reward = np.clip(dis_reward, 0, 1)
+
+        # print(dis_del_reward, dis_reward, angle_reward)
+        return (dis_del_reward + angle_reward)/2 - 1
 
     def get_long_term_reward(self, timeout) -> int:
         success, _ = self.success()
         fail, _ = self.failure()
         if success:
-            return 1
-        elif fail and timeout:
-            return -1
+            return 200
+        elif fail:
+            return -2
+        elif timeout:
+            cur_age_pos = np.array(self.robot.robot_body.get_snake_head_pos())
+            cur_dis = np.sqrt(np.sum((self._tar_pos[:2] - cur_age_pos[:2]) ** 2))
+            timeout_reward = 2 * (1 - cur_dis / self.init_tar_rob_dis) - 1
+            timeout_reward = np.clip(timeout_reward, -1, 1)
+            return timeout_reward * 100
         else:
             return 0
 
@@ -121,10 +156,29 @@ class ReachTarget(Task):
         endgoal = robot_position
         return endgoal
 
+    def get_target_pos(self) -> List[float]:
+        return self.target.get_position()
+
+    def get_target_angle(self) -> List[float]:
+        robot_pos = np.array(self.robot.robot_body.get_snake_head_pos())[:2]
+        target_pos = self._tar_pos[:2]
+        k = (robot_pos[1] - target_pos[1]) / (robot_pos[0] - target_pos[0] + 1e-8)
+        angle = np.arctan(k)
+        # print("angle = ", np.rad2deg(angle))
+        return [angle]
+
     @property
     def episode_len(self) -> int:
         return self._epi_len
 
-    def get_target_pos(self) -> List[float]:
-        return self.target.get_position()
+    @staticmethod
+    def decorate_observation(observation: Observation) -> Observation:
+        """Can be used for tasks that want to modify the observations.
 
+        Usually not used. Perhpas can be used to model
+
+        :param observation: The Observation for this time step.
+        :return: The modified Observation.
+        """
+
+        return observation

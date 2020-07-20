@@ -26,8 +26,7 @@ class Environment(object):
 
     def __init__(self, action_config: ActionConfig, dataset_root: str = '',
                  obs_config=ObservationConfig(), headless=False,
-                 static_positions: bool = False,
-                 robot_configuration='rattler'):
+                 static_positions: bool = False, robot_configuration='rattler'):
 
         self._dataset_root = dataset_root
         self._action_config = action_config
@@ -115,3 +114,6 @@ class Environment(object):
             self._pyrep, self._robot, self._scene, task,
             self._action_config, self._dataset_root, self._obs_config,
             self._static_positions)
+
+    def load_env_param(self):
+        self._scene.load_obs_normalizer()
