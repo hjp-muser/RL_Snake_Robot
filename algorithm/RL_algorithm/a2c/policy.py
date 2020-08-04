@@ -18,11 +18,11 @@ class MlpPolicy(FeedForwardPolicy):
     """
 
     def __init__(self, sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=False, **_kwargs):
-        pi_layers = [512, 256, 64]
-        vf_layers = [512, 256, 64]
+        pi_layers = [512, 256, 256, 64]
+        vf_layers = [512, 256, 256, 64]
         net_arch = [dict(vf=pi_layers, pi=vf_layers)]
-        pi_act_funs = [tf.nn.tanh, tf.nn.tanh, tf.nn.tanh]
-        vf_act_funs = [tf.nn.tanh, tf.nn.tanh, tf.nn.tanh]
+        pi_act_funs = [tf.nn.leaky_relu, tf.nn.leaky_relu, tf.nn.leaky_relu, tf.nn.tanh]
+        vf_act_funs = [tf.nn.leaky_relu, tf.nn.leaky_relu, tf.nn.leaky_relu, tf.nn.tanh]
         act_funs = [dict(vf=pi_act_funs, pi=vf_act_funs)]
         super(MlpPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse, net_arch=net_arch,
                                         act_funs=act_funs, feature_extraction="mlp", **_kwargs)

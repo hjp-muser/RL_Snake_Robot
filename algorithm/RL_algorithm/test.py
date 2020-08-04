@@ -81,7 +81,6 @@ def train(args, extra_args):  # TODO: pretrain
     print('env_type: {}'.format(env_type))
 
     total_timesteps = int(args.num_timesteps)
-    seed = args.seed
 
     # load model
     alg_model = get_algorithm_model(args.alg)
@@ -108,7 +107,6 @@ def train(args, extra_args):  # TODO: pretrain
     # model instance
     model_ins = alg_model(
         env=env,
-        seed=seed,
         **alg_kwargs
     )
     model_ins.learn(total_timesteps)
@@ -196,4 +194,7 @@ if __name__ == '__main__':
     hac_args = ['--env=reach_target-state-param-v0', '--alg=hac', '--num_timesteps=1e6', '--seed=10']
     hac_play = []
 
-    main(sac_args)
+    ###########################################################################################################
+    ddpg_args = ['--env=reach_target-state-param-v0', '--alg=ddpg', '--num_timesteps=1e6']
+
+    main(ddpg_args)

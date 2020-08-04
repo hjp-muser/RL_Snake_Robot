@@ -147,7 +147,7 @@ class Scene(object):
             )
         )
         obs = self._active_task.decorate_observation(obs)
-        self.normalize_observation(obs)
+        # self.normalize_observation(obs)
         return obs
 
     def normalize_observation(self, obs: Observation):

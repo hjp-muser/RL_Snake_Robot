@@ -7,7 +7,7 @@ from rlbench.action_config import ActionConfig, SnakeRobotActionConfig
 from rlbench.observation_config import ObservationConfig
 import numpy as np
 
-SKIP_CONTROL = 50
+SKIP_CONTROL = 20
 
 
 class RLBenchEnv(gym.Env):
@@ -62,8 +62,8 @@ class RLBenchEnv(gym.Env):
             else:
                 # low = np.array([0.0, -0.8, -0.8, 1.0, 3.0, -50, -10, -0.1, -0.1])
                 # high = np.array([1.0, 0.8, 0.8, 3.0, 5.0, 50, 10, 0.1, 0.1])
-                low = np.array([-1, -1, -1, -1])
-                high = np.array([1, 1, 1, 1])
+                low = np.array([-1, -1, -1])
+                high = np.array([1, 1, 1])
                 # low = np.array([1.0])
                 # high = np.array([2.0])
                 self.action_space = spaces.Box(low=low, high=high, dtype=np.float32)

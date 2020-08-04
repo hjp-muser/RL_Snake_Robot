@@ -122,11 +122,11 @@ class ReachTarget(Task):
         # if self.angle_reward_min != self.angle_reward_max:
         #     angle_reward = (angle_reward - self.angle_reward_min) / (self.angle_reward_max - self.angle_reward_min)
 
-        dis_reward = 1 - cur_dis / self.init_tar_rob_dis
-        dis_reward = np.clip(dis_reward, 0, 1)
+        dis_reward = - cur_dis / self.init_tar_rob_dis
+        dis_reward = np.clip(dis_reward, -1, 0)
 
         # print(dis_del_reward, dis_reward, angle_reward)
-        return (dis_del_reward + angle_reward)/2 - 1
+        return dis_reward
 
     def get_long_term_reward(self, timeout) -> int:
         success, _ = self.success()

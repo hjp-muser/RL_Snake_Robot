@@ -41,7 +41,7 @@ class Model(object):
     """
 
     def __init__(self, network, env, *, seed=None, nsteps=5, total_timesteps=int(80e6),
-                 vf_coef=0.5, ent_coef=0.1, max_grad_norm=0.5, lr=5e-4, lrschedule='constant',
+                 vf_coef=0.5, ent_coef=0.5, max_grad_norm=0.5, lr=1e-5, lrschedule='constant',
                  gamma=0.99, alpha=0.99, epsilon=1e-5, model_save_path=None, tb_log_path=None):
 
         """
@@ -138,7 +138,7 @@ class Model(object):
             # Value loss
             self.vf_loss = losses.mean_squared_error(tf.squeeze(self.train_model.value_fn), self.reward_ph)
 
-            self.reg_loss = tf.contrib.layers.apply_regularization(tf.contrib.layers.l2_regularizer(0.4),
+            self.reg_loss = tf.contrib.layers.apply_regularization(tf.contrib.layers.l2_regularizer(0.8),
                                                          tf.trainable_variables())
 
             self.loss = self.pg_loss - self.entropy * ent_coef + self.vf_loss * vf_coef + self.reg_loss
@@ -155,7 +155,7 @@ class Model(object):
             params = tf.trainable_variables("a2c_model")
 
             # 2. Calculate the gradients
-            grads = tf.gradients(self.loss, params)
+            self.grads = grads = tf.gradients(self.loss, params)
             if max_grad_norm is not None:
                 # Clip the gradients (normalize)
                 grads, grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
@@ -189,17 +189,17 @@ class Model(object):
         #     td_map[self.train_model.dones_ph] = masks
 
         if writer is not None:
-            summary, policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map
+            summary, policy_loss, value_loss, policy_entropy, _, grads = self.sess.run(
+                [self.summary, self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop, self.grads], td_map
             )
             writer.add_summary(summary, update)
         else:
-            policy_loss, value_loss, policy_entropy, _ = self.sess.run(
-                [self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop], td_map
+            policy_loss, value_loss, policy_entropy, _, grads = self.sess.run(
+                [self.pg_loss, self.vf_loss, self.entropy, self.apply_backprop, self.grads], td_map
             )
-        return policy_loss, value_loss, policy_entropy
+        return policy_loss, value_loss, policy_entropy, grads
 
-    def learn(self, total_timesteps=int(1e6), log_interval=1000, pretrain_load_path=None):
+    def learn(self, total_timesteps=int(1e6), log_interval=200, pretrain_load_path=None):
 
         """
         Parameters:
@@ -235,7 +235,7 @@ class Model(object):
 
                 # Get mini batch of experiences
                 obs, rewards, masks, actions, values, epinfos = runner.run()
-                policy_loss, value_loss, policy_entropy = self.train(obs, rewards, masks, actions, values, update, writer)
+                policy_loss, value_loss, policy_entropy, grads = self.train(obs, rewards, masks, actions, values, update, writer)
                 epinfobuf.extend(epinfos)
                 nseconds = time.time() - tstart
                 # Calculate the fps (frame per second)
@@ -260,13 +260,15 @@ class Model(object):
                     logger.record_tabular("eplenmean", safe_mean([epinfo['l'] for epinfo in epinfobuf]))
                     logger.dump_tabular()
 
-                if update % 2000 == 0 or update == total_timesteps // nbatch:
+                if update % 200 == 0 or update == total_timesteps // nbatch:
                     if self.model_save_path is None:
                         file_name = time.strftime('Y%YM%mD%d_h%Hm%Ms%S', time.localtime(time.time()))
                         model_save_path = self.def_path_pre + file_name
                         self.save(model_save_path)
                     else:
                         self.save(self.model_save_path)
+
+                    # print("grads = ", grads[-10:])
 
         return self
 

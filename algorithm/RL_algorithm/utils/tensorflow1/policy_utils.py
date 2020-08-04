@@ -394,7 +394,7 @@ class FeedForwardPolicy(ActorCriticPolicy):
 
             self._value_fn = linear(vf_latent, 'vf', 1)
 
-            mean = linear(pi_latent, 'pi', ac_space.shape[0])
+            mean = tf.nn.sigmoid(linear(pi_latent, 'pi', ac_space.shape[0]))
             logstd = tf.get_variable(name='pi/logstd', shape=[1, ac_space.shape[0]], initializer=tf.random_normal_initializer())
             pdparam = tf.concat([mean, mean*0.0+logstd], axis=1)
             self._policy = mean
