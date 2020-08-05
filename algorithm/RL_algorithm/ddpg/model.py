@@ -8,6 +8,8 @@ from baselines.ddpg.memory import Memory
 from baselines.ddpg.noise import AdaptiveParamNoiseSpec, NormalActionNoise, OrnsteinUhlenbeckActionNoise
 from baselines.common import set_global_seeds
 
+from algorithm.RL_algorithm.utils.tensorflow1.tf_utils import save_variables, load_variables
+
 try:
     from mpi4py import MPI
 except ImportError:
@@ -85,10 +87,10 @@ def get_perturbed_actor_updates(actor, perturbed_actor, param_noise_stddev):
 
 
 class Model(object):
-    def __init__(self, network, env, gamma=1, tau=0.01,
+    def __init__(self, network, env, gamma=1, tau=0.01, total_timesteps=1e6,
                  normalize_observations=True, normalize_returns=False, enable_popart=False,
                  noise_type='adaptive-param_0.2', clip_norm=None, reward_scale=1.,
-                 batch_size=128, l2_reg_coef=0.1, actor_lr=1e-4, critic_lr=1e-3,
+                 batch_size=128, l2_reg_coef=0.2, actor_lr=1e-4, critic_lr=1e-3,
                  observation_range=(-5., 5.), action_range=(-1., 1.), return_range=(-np.inf, np.inf),
                  **network_kwargs):
         # logger.info('Using agent with the following configuration:')
@@ -109,6 +111,7 @@ class Model(object):
         self.env = env
         self.gamma = gamma
         self.tau = tau
+        self.total_timesteps = total_timesteps
         self.normalize_observations = normalize_observations
         self.normalize_returns = normalize_returns
         self.enable_popart = enable_popart
@@ -201,6 +204,7 @@ class Model(object):
         self.setup_target_network_updates()
 
         self.initial_state = None  # recurrent architectures not supported yet
+        self.def_path_pre = os.path.dirname(os.path.abspath(__file__)) + '/tmp/'
 
     def setup_target_network_updates(self):
         actor_init_updates, actor_soft_updates = get_target_updates(self.actor.vars, self.target_actor.vars, self.tau)
@@ -316,7 +320,7 @@ class Model(object):
         self.stats_ops = ops
         self.stats_names = names
 
-    def step(self, obs, apply_noise=True, compute_Q=True):
+    def train_step(self, obs, apply_noise=True, compute_Q=True):
         if self.param_noise is not None and apply_noise:
             actor_tf = self.perturbed_actor_tf
         else:
@@ -332,6 +336,18 @@ class Model(object):
             noise = self.action_noise()
             assert noise.shape == action[0].shape
             action += noise
+        action = np.clip(action, self.action_range[0], self.action_range[1])
+
+        return action, q, None, None
+
+    def step(self, obs, compute_Q=True):
+        feed_dict = {self.obs0: U.adjust_shape(self.obs0, [obs])}
+        if compute_Q:
+            action, q = self.sess.run([self.actor_tf, self.critic_with_actor_tf], feed_dict=feed_dict)
+        else:
+            action = self.sess.run(self.actor_tf, feed_dict=feed_dict)
+            q = None
+
         action = np.clip(action, self.action_range[0], self.action_range[1])
 
         return action, q, None, None
@@ -456,18 +472,14 @@ class Model(object):
             })
 
     def learn(self,
-              seed=None,
               total_timesteps=None,
+              seed=None,
               nb_epochs=None,  # with default settings, perform 1M steps total
               nb_epoch_cycles=20,
               nb_rollout_steps=100,
               render=False,
-              render_eval=False,
-
               nb_train_steps=50,  # per epoch cycle and MPI worker,
-              nb_eval_steps=100,
               batch_size=64,  # per MPI worker
-              eval_env=None,
               param_noise_adaption_interval=50,):
 
         set_global_seeds(seed)
@@ -483,7 +495,7 @@ class Model(object):
         else:
             rank = 0
 
-        eval_episode_rewards_history = deque(maxlen=100)
+        # eval_episode_rewards_history = deque(maxlen=100)
         episode_rewards_history = deque(maxlen=100)
         sess = U.get_session()
         # Prepare everything.
@@ -517,7 +529,7 @@ class Model(object):
                     self.reset()
                 for t_rollout in range(nb_rollout_steps):
                     # Predict next action.
-                    action, q, _, _ = self.step(obs, apply_noise=True, compute_Q=True)
+                    action, q, _, _ = self.train_step(obs, apply_noise=True, compute_Q=True)
 
                     # Execute next action.
                     if rank == 0 and render:
@@ -569,35 +581,40 @@ class Model(object):
                     epoch_critic_losses.append(cl)
                     epoch_actor_losses.append(al)
                     self.update_target_net()
-
-            # Evaluate.
-            eval_episode_rewards = []
-            eval_qs = []
-            if eval_env is not None:
-                eval_obs = eval_env.reset()
-                nenvs_eval = eval_obs.shape[0]
-                eval_episode_reward = np.zeros(nenvs_eval, dtype=np.float32)
-                for t_rollout in range(nb_eval_steps):
-                    eval_action, eval_q, _, _ = self.step(eval_obs, apply_noise=False, compute_Q=True)
-                    # eval_obs, eval_r, eval_done, eval_info = eval_env.step(
-                    #     max_action * eval_action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
-                    eval_obs, eval_r, eval_done, eval_info = eval_env.step(eval_action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
-
-                    if render_eval:
-                        eval_env.render()
-                    eval_episode_reward += eval_r
-
-                    eval_qs.append(eval_q)
-                    for d in range(len(eval_done)):
-                        if eval_done[d]:
-                            eval_episode_rewards.append(eval_episode_reward[d])
-                            eval_episode_rewards_history.append(eval_episode_reward[d])
-                            eval_episode_reward[d] = 0.0
+            #
+            # # Evaluate.
+            # eval_episode_rewards = []
+            # eval_qs = []
+            # if eval_env is not None:
+            #     eval_obs = eval_env.reset()
+            #     nenvs_eval = eval_obs.shape[0]
+            #     eval_episode_reward = np.zeros(nenvs_eval, dtype=np.float32)
+            #     for t_rollout in range(nb_eval_steps):
+            #         eval_action, eval_q, _, _ = self.train_step(eval_obs, apply_noise=False, compute_Q=True)
+            #         # eval_obs, eval_r, eval_done, eval_info = eval_env.step(
+            #         #     max_action * eval_action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
+            #         eval_obs, eval_r, eval_done, eval_info = eval_env.step(eval_action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
+            #
+            #         if render_eval:
+            #             eval_env.render()
+            #         eval_episode_reward += eval_r
+            #
+            #         eval_qs.append(eval_q)
+            #         for d in range(len(eval_done)):
+            #             if eval_done[d]:
+            #                 eval_episode_rewards.append(eval_episode_reward[d])
+            #                 eval_episode_rewards_history.append(eval_episode_reward[d])
+            #                 eval_episode_reward[d] = 0.0
 
             if MPI is not None:
                 mpi_size = MPI.COMM_WORLD.Get_size()
             else:
                 mpi_size = 1
+
+            # save trainable variables
+            file_name = time.strftime('Y%YM%mD%d_h%Hm%Ms%S', time.localtime(time.time()))
+            model_save_path = self.def_path_pre + file_name
+            self.save(model_save_path)
 
             # Log stats.
             # XXX shouldn't call np.mean on variable length lists
@@ -620,11 +637,11 @@ class Model(object):
             combined_stats['rollout/episodes'] = epoch_episodes
             combined_stats['rollout/actions_std'] = np.std(epoch_actions)
             # Evaluation statistics.
-            if eval_env is not None:
-                combined_stats['eval/return'] = eval_episode_rewards
-                combined_stats['eval/return_history'] = np.mean(eval_episode_rewards_history)
-                combined_stats['eval/Q'] = eval_qs
-                combined_stats['eval/episodes'] = len(eval_episode_rewards)
+            # if eval_env is not None:
+            #     combined_stats['eval/return'] = eval_episode_rewards
+            #     combined_stats['eval/return_history'] = np.mean(eval_episode_rewards_history)
+            #     combined_stats['eval/Q'] = eval_qs
+            #     combined_stats['eval/episodes'] = len(eval_episode_rewards)
 
             combined_stats_sums = np.array([np.array(x).flatten()[0] for x in combined_stats.values()])
             if MPI is not None:
@@ -647,8 +664,28 @@ class Model(object):
                 if hasattr(self.env, 'get_state'):
                     with open(os.path.join(logdir, 'env_state.pkl'), 'wb') as f:
                         pickle.dump(self.env.get_state(), f)
-                if eval_env and hasattr(eval_env, 'get_state'):
-                    with open(os.path.join(logdir, 'eval_env_state.pkl'), 'wb') as f:
-                        pickle.dump(eval_env.get_state(), f)
-
+                # if eval_env and hasattr(eval_env, 'get_state'):
+                #     with open(os.path.join(logdir, 'eval_env_state.pkl'), 'wb') as f:
+                #         pickle.dump(eval_env.get_state(), f)
+        self.sess.graph._unsafe_unfinalize()
         return self
+
+    def save(self, save_path=None):
+        save_variables(save_path=save_path, sess=self.sess)
+        print('save model variables to', save_path)
+
+    def load_newest(self, load_path=None):
+        file_list = os.listdir(self.def_path_pre)
+        file_list.sort(key=lambda x: os.path.getmtime(os.path.join(self.def_path_pre, x)))
+        if load_path is None:
+            load_path = os.path.join(self.def_path_pre, file_list[-1])
+        load_variables(load_path=load_path, sess=self.sess)
+        print('load_path: ', load_path)
+
+    def load_index(self, index, load_path=None):
+        file_list = os.listdir(self.def_path_pre)
+        file_list.sort(key=lambda x: os.path.getmtime(os.path.join(self.def_path_pre, x)), reverse=True)
+        if load_path is None:
+            load_path = os.path.join(self.def_path_pre, file_list[index])
+        load_variables(load_path=load_path, sess=self.sess)
+        print('load_path: ', load_path)
