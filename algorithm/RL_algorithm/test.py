@@ -138,8 +138,8 @@ def main(args):
         logger.log("Running trained model")
         # model.load_newest()
         model.load_index(0)
-        for i in range(len(env.envs)):
-            env.envs[i].load_env_param()
+        # for i in range(len(env.envs)):
+        #     env.envs[i].load_env_param()
         obs = env.reset()
 
         state = model.initial_state if hasattr(model, 'initial_state') else None
