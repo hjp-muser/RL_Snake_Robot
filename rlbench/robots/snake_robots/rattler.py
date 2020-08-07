@@ -30,7 +30,7 @@ class Rattler(SnakeRobot):
         joints = np.zeros((num_joints,))
         alpha_h = 0.15 * alpha_h + 0.55
         alpha_v = 0.2 * alpha_v + 0.2
-        theta_h = 2 * theta_h + 2
+        theta_h = 2 * theta_h + 4
         # print("------------------------------------------------")
         # print('sign = ', sign)
         # print('alpha_h = ', alpha_h)
