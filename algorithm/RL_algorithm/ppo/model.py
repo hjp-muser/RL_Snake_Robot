@@ -21,6 +21,7 @@ except ImportError:
 from algorithm.RL_algorithm.utils.math_utils import safe_mean
 from algorithm.RL_algorithm.utils.tensorflow1.tf_utils import save_variables, load_variables
 
+
 def constfn(val):
     def f(_):
         return val
@@ -76,7 +77,6 @@ class Model(object):
 
         **network_kwargs:                 keyword arguments to the policy / network builder. See baselines.common/policies.py/build_policy and arguments to a particular type of network
                                           For instance, 'mlp' network architecture has arguments num_hidden and num_layers.
-
 
         """
 
@@ -238,7 +238,7 @@ class Model(object):
             td_map
         )[:-1]
 
-    def learn(self, total_timesteps, seed=None, log_interval=10, save_interval=0):
+    def learn(self, total_timesteps, seed=None, log_interval=10, save_interval=10):
 
         set_global_seeds(seed)
         total_timesteps = int(total_timesteps)
