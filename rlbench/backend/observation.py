@@ -14,6 +14,7 @@ class Observation(object):
                  robot_pos:  np.ndarray,
                  target_pos: np.ndarray,
                  target_angle: np.ndarray,
+                 robot_angle: np.ndarray,
                  task_low_dim_state: np.ndarray):
         self.head_camera_rgb = head_camera_rgb
         self.head_camera_depth = head_camera_depth
@@ -24,6 +25,7 @@ class Observation(object):
         self.robot_pos = robot_pos
         self.target_pos = target_pos
         self.target_angle = target_angle
+        self.robot_angle = robot_angle
         self.task_low_dim_state = task_low_dim_state
 
     def get_low_dim_data(self) -> np.ndarray:
@@ -32,7 +34,8 @@ class Observation(object):
         :return: 1D array of observations.
         """
         low_dim_data = []
-        for data in [self.joint_velocities, self.joint_positions, self.joint_forces, self.robot_pos, self.target_pos, self.target_angle]:
+        for data in [self.joint_velocities, self.joint_positions, self.joint_forces, self.robot_pos,
+                     self.target_pos, self.target_angle, self.robot_angle]:
             if data is not None:
                 low_dim_data.append(data)
         return np.concatenate(low_dim_data)
@@ -41,7 +44,7 @@ class Observation(object):
         flatten_data = []
         for data in [self.head_camera_rgb, self.head_camera_depth, self.head_camera_mask,
                      self.joint_velocities, self.joint_positions, self.joint_forces,
-                     self.robot_pos, self.target_pos, self.target_angle, self.task_low_dim_state]:
+                     self.robot_pos, self.target_pos, self.target_angle, self.robot_angle, self.task_low_dim_state]:
             if data is not None:
                 flatten_data.append(data)
         flatten_data = np.concatenate(flatten_data)

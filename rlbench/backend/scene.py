@@ -21,7 +21,6 @@ class Scene(object):
     _obs_normalizer = None
     _has_init_obs_normalizer = False
 
-
     def __init__(self, pyrep: PyRep, robot: Robot, obs_config=ObservationConfig()):
         self._pyrep = pyrep
         self._snake_robot = robot.robot_body
@@ -140,6 +139,10 @@ class Scene(object):
             target_angle=(
                 np.array(self._active_task.get_target_angle())
                 if self._obs_config.target_angle else None
+            ),
+            robot_angle=(
+                np.array(self._active_task.get_robot_angle())
+                if self._obs_config.robot_angle else None
             ),
             task_low_dim_state=(
                 self._active_task.get_low_dim_state() if

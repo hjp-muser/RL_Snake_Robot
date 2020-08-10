@@ -63,12 +63,12 @@ class ReachTarget(Task):
         self.target.set_color(color_rgb)
 
         # set random position of the target
-        # rand_x = np.random.rand()
-        # rand_y = np.random.rand()
-        # self.target.set_position([rand_x, rand_y, 0.04])
-        # self.success_sensor.set_position([rand_x, rand_y, 0.04])
-        self.target.set_position([0.2, -0.2, 0.04])
-        self.success_sensor.set_position([0.2, -0.2, 0.04])
+        rand_x = np.random.rand()
+        rand_y = np.random.rand()
+        self.target.set_position([rand_x, rand_y, 0.04])
+        self.success_sensor.set_position([rand_x, rand_y, 0.04])
+        # self.target.set_position([0.2, -0.2, 0.04])
+        # self.success_sensor.set_position([0.2, -0.2, 0.04])
 
         self._tar_pos = np.array(self.target.get_position())
         self._last_rob_pos_queue = deque(maxlen=50)
@@ -166,6 +166,10 @@ class ReachTarget(Task):
         angle = np.arctan(k)
         # print("angle = ", np.rad2deg(angle))
         return [angle]
+
+    def get_robot_angle(self) -> List[float]:
+        robot_angle = self.robot.robot_body.get_snake_angle()
+        return [robot_angle]
 
     @property
     def episode_len(self) -> int:

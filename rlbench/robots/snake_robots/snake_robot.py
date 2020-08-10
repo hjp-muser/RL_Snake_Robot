@@ -1,3 +1,5 @@
+import numpy as np
+
 from rlbench.robots.robot_component import RobotComponent
 
 from pyrep.backend import sim
@@ -45,6 +47,13 @@ class SnakeRobot(RobotComponent):
     def get_snake_joints_pos(self):
         pos = [self.joints[i].get_position() for i in range(self.get_joint_count())]
         return pos
+
+    def get_snake_angle(self):
+        head_pos = self.get_snake_head_pos()[:2]
+        tail_pos = self.get_snake_tail_pos()[:2]
+        k = (tail_pos[1] - head_pos[1]) / (tail_pos[0] - head_pos[0] + 1e-8)
+        angle_rad = np.arctan(k)
+        return angle_rad
 
     def init_state(self):
         pass
