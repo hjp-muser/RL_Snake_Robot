@@ -37,6 +37,7 @@ class ObservationConfig(object):
                  robot_pos=False,
                  target_pos=False,
                  target_angle=False,
+                 robot_angle=False,
                  task_low_dim_state=False,
                  ):
         self.head_camera = (CameraConfig() if head_camera is None else head_camera)
@@ -49,6 +50,7 @@ class ObservationConfig(object):
         self.robot_pos = robot_pos
         self.target_pos = target_pos
         self.target_angle = target_angle
+        self.robot_angle = robot_angle
         self.task_low_dim_state = task_low_dim_state
 
     def set_all(self, value: bool):
@@ -65,6 +67,7 @@ class ObservationConfig(object):
         self.robot_pos = value
         self.target_pos = value
         self.target_angle = value
+        # self.robot_angle = value
         # self.task_low_dim_state = value
 
     def set_camera_rgb(self, value: bool):
