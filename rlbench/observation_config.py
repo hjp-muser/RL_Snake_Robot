@@ -67,7 +67,7 @@ class ObservationConfig(object):
         self.robot_pos = value
         self.target_pos = value
         self.target_angle = value
-        # self.robot_angle = value
+        self.robot_angle = value
         # self.task_low_dim_state = value
 
     def set_camera_rgb(self, value: bool):
