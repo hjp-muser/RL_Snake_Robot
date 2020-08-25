@@ -144,55 +144,59 @@ class Scene(object):
                 np.array(self._active_task.get_robot_angle())
                 if self._obs_config.robot_angle else None
             ),
-            task_low_dim_state=(
-                self._active_task.get_low_dim_state() if
-                self._obs_config.task_low_dim_state else None
+            desired_goal=(
+                np.array(self._active_task.get_target_pos())
+                if self._obs_config.desired_goal else None
+            ),
+            achieved_goal=(
+                np.array(self._snake_robot.get_snake_head_pos())
+                if self._obs_config.achieved_goal else None
             )
         )
         obs = self._active_task.decorate_observation(obs)
         # self.normalize_observation(obs)
         return obs
 
-    def normalize_observation(self, obs: Observation):
-        if not Scene._has_init_obs_normalizer:
-            Scene._obs_normalizer = NormFilter(obs.shape)
-            Scene._has_init_obs_normalizer = True
+    # def normalize_observation(self, obs: Observation):
+    #     if not Scene._has_init_obs_normalizer:
+    #         Scene._obs_normalizer = NormFilter(obs.shape)
+    #         Scene._has_init_obs_normalizer = True
+    #
+    #     flatten_obs = obs.get_flatten_data()
+    #     normalized_obs = Scene._obs_normalizer(flatten_obs)
+    #     if self._obs_config.head_camera.rgb:
+    #         shape = obs.head_camera_rgb.shape
+    #         obs.head_camera_rgb, normalized_obs = np.split(normalized_obs, [3 * len(obs.head_camera_rgb)])
+    #         obs.head_camera_rgb = obs.head_camera_rgb.reshape(shape)
+    #     if self._obs_config.head_camera.depth:
+    #         shape = obs.head_camera_depth.shape
+    #         obs.head_camera_depth, normalized_obs = np.split(normalized_obs, [3 * len(obs.head_camera_depth)])
+    #         obs.head_camera_depth = obs.head_camera_depth.reshape(shape)
+    #     if self._obs_config.head_camera.mask:
+    #         shape = obs.head_camera_mask.shape
+    #         obs.head_camera_mask, normalized_obs = np.split(normalized_obs, [3 * len(obs.head_camera_mask)])
+    #         obs.head_camera_mask = obs.head_camera_mask.reshape(shape)
+    #     if self._obs_config.joint_velocities:
+    #         obs.joint_velocities, normalized_obs = np.split(normalized_obs, [len(obs.joint_velocities)])
+    #     if self._obs_config.joint_positions:
+    #         obs.joint_positions, normalized_obs = np.split(normalized_obs, [len(obs.joint_positions)])
+    #     if self._obs_config.joint_forces:
+    #         obs.joint_forces, normalized_obs = np.split(normalized_obs, [len(obs.joint_forces)])
+    #     if self._obs_config.robot_pos:
+    #         obs.robot_pos, normalized_obs = np.split(normalized_obs, [len(obs.robot_pos)])
+    #     if self._obs_config.target_pos:
+    #         obs.target_pos, normalized_obs = np.split(normalized_obs, [len(obs.target_pos)])
+    #     if self._obs_config.target_angle:
+    #         obs.target_angle = normalized_obs
+    #
+    #     with open(NORM_FILTER_PICKLE_PATH, 'wb') as pickle_file:
+    #         pickle.dump(Scene._obs_normalizer, pickle_file)
 
-        flatten_obs = obs.get_flatten_data()
-        normalized_obs = Scene._obs_normalizer(flatten_obs)
-        if self._obs_config.head_camera.rgb:
-            shape = obs.head_camera_rgb.shape
-            obs.head_camera_rgb, normalized_obs = np.split(normalized_obs, [3 * len(obs.head_camera_rgb)])
-            obs.head_camera_rgb = obs.head_camera_rgb.reshape(shape)
-        if self._obs_config.head_camera.depth:
-            shape = obs.head_camera_depth.shape
-            obs.head_camera_depth, normalized_obs = np.split(normalized_obs, [3 * len(obs.head_camera_depth)])
-            obs.head_camera_depth = obs.head_camera_depth.reshape(shape)
-        if self._obs_config.head_camera.mask:
-            shape = obs.head_camera_mask.shape
-            obs.head_camera_mask, normalized_obs = np.split(normalized_obs, [3 * len(obs.head_camera_mask)])
-            obs.head_camera_mask = obs.head_camera_mask.reshape(shape)
-        if self._obs_config.joint_velocities:
-            obs.joint_velocities, normalized_obs = np.split(normalized_obs, [len(obs.joint_velocities)])
-        if self._obs_config.joint_positions:
-            obs.joint_positions, normalized_obs = np.split(normalized_obs, [len(obs.joint_positions)])
-        if self._obs_config.joint_forces:
-            obs.joint_forces, normalized_obs = np.split(normalized_obs, [len(obs.joint_forces)])
-        if self._obs_config.robot_pos:
-            obs.robot_pos, normalized_obs = np.split(normalized_obs, [len(obs.robot_pos)])
-        if self._obs_config.target_pos:
-            obs.target_pos, normalized_obs = np.split(normalized_obs, [len(obs.target_pos)])
-        if self._obs_config.target_angle:
-            obs.target_angle = normalized_obs
-
-        with open(NORM_FILTER_PICKLE_PATH, 'wb') as pickle_file:
-            pickle.dump(Scene._obs_normalizer, pickle_file)
-
-    @staticmethod
-    def load_obs_normalizer():
-        with open(NORM_FILTER_PICKLE_PATH, 'rb') as pickle_file:
-            Scene._obs_normalizer = pickle.load(pickle_file)
-            Scene._has_init_obs_normalizer = True
+    # @staticmethod
+    # def load_obs_normalizer():
+    #     with open(NORM_FILTER_PICKLE_PATH, 'rb') as pickle_file:
+    #         Scene._obs_normalizer = pickle.load(pickle_file)
+    #         Scene._has_init_obs_normalizer = True
 
     def step(self):
         self._pyrep.step()

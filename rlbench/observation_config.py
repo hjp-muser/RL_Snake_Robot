@@ -38,7 +38,8 @@ class ObservationConfig(object):
                  target_pos=False,
                  target_angle=False,
                  robot_angle=False,
-                 task_low_dim_state=False,
+                 desired_goal=False,
+                 achieved_goal=False,
                  ):
         self.head_camera = (CameraConfig() if head_camera is None else head_camera)
         self.joint_velocities = joint_velocities
@@ -51,7 +52,8 @@ class ObservationConfig(object):
         self.target_pos = target_pos
         self.target_angle = target_angle
         self.robot_angle = robot_angle
-        self.task_low_dim_state = task_low_dim_state
+        self.desired_goal = desired_goal
+        self.achieved_goal = achieved_goal
 
     def set_all(self, value: bool):
         self.set_all_high_dim(value)
@@ -68,7 +70,10 @@ class ObservationConfig(object):
         self.target_pos = value
         self.target_angle = value
         self.robot_angle = value
-        # self.task_low_dim_state = value
+
+    def set_goal_info(self, value: bool):
+        self.desired_goal = value
+        self.achieved_goal = value
 
     def set_camera_rgb(self, value: bool):
         self.head_camera.rgb = value

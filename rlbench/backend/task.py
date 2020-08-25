@@ -139,6 +139,9 @@ class Task(object):
     def project_state_to_endgoal(self) -> list:
         pass
 
+    def compute_reward(self, achieved_goal, desired_goal) -> float:
+        pass
+
     @staticmethod
     def decorate_observation(observation: Observation) -> Observation:
         """Can be used for tasks that want to modify the observations.
