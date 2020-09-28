@@ -18,7 +18,7 @@ class ReachTarget(Task):
         super().__init__(pyrep, robot)
         self.target = None
         self.success_sensor = None
-        self._epi_len = 1.5e3
+        self._epi_len = 1500
         self._tar_pos = None
         self._last_rob_pos_queue = None
         self.init_tar_rob_dis = None
@@ -171,6 +171,12 @@ class ReachTarget(Task):
         robot_angle = self.robot.robot_body.get_snake_angle()
         return [robot_angle]
 
+    def compute_reward(self, achieved_goal, desired_goal) -> np.ndarray:
+        goal_dis = np.sqrt(np.sum((achieved_goal[:, :2] - desired_goal[:, :2]) ** 2, axis=1))
+        reward = - goal_dis / self.init_tar_rob_dis
+        reward = np.clip(reward, -1, 0)
+        return reward
+
     @property
     def episode_len(self) -> int:
         return self._epi_len
@@ -186,3 +192,4 @@ class ReachTarget(Task):
         """
 
         return observation
+

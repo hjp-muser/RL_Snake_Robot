@@ -1,18 +1,9 @@
-import os
 import numpy as np
-import gym
 
 from baselines import logger
-from baselines.her.ddpg import DDPG
-from baselines.her.her_sampler import make_sample_her_transitions
-from baselines.bench.monitor import Monitor
 
-DEFAULT_ENV_PARAMS = {
-    'FetchReach-v1': {
-        'n_cycles': 10,
-    },
-}
-
+from algorithm.RL_algorithm.her.ddpg import DDPG
+from algorithm.RL_algorithm.her.sampler import make_sample_her_transitions
 
 DEFAULT_PARAMS = {
     # env
@@ -31,7 +22,6 @@ DEFAULT_PARAMS = {
     'relative_goals': False,
     # training
     'n_cycles': 50,  # per epoch
-    'rollout_batch_size': 2,  # per mpi thread
     'n_batches': 40,  # training batches per cycle
     'batch_size': 256,  # per mpi thread, measured in transitions and reduced to even multiple of chunk_length.
     'n_test_rollouts': 10,  # number of test rollouts per epoch, each consists of rollout_batch_size rollouts
@@ -46,14 +36,14 @@ DEFAULT_PARAMS = {
     'norm_eps': 0.01,  # epsilon used for observation normalization
     'norm_clip': 5,  # normalized observations are cropped to this values
 
-    'bc_loss': 0, # whether or not to use the behavior cloning loss as an auxilliary loss
-    'q_filter': 0, # whether or not a Q value filter should be used on the Actor outputs
-    'num_demo': 100, # number of expert demo episodes
-    'demo_batch_size': 128, #number of samples to be used from the demonstrations buffer, per mpi thread 128/1024 or 32/256
-    'prm_loss_weight': 0.001, #Weight corresponding to the primary loss
-    'aux_loss_weight':  0.0078, #Weight corresponding to the auxilliary loss also called the cloning loss
+    'bc_loss': 0,  # whether or not to use the behavior cloning loss as an auxilliary loss
+    'q_filter': 0,  # whether or not a Q value filter should be used on the Actor outputs
+    'num_demo': 100,  # number of expert demo episodes
+    'demo_batch_size': 128,
+    # number of samples to be used from the demonstrations buffer, per mpi thread 128/1024 or 32/256
+    'prm_loss_weight': 0.001,  # Weight corresponding to the primary loss
+    'aux_loss_weight': 0.0078,  # Weight corresponding to the auxilliary loss also called the cloning loss
 }
-
 
 CACHED_ENVS = {}
 
@@ -73,31 +63,9 @@ def cached_make_env(make_env):
 def prepare_params(kwargs):
     # DDPG params
     ddpg_params = dict()
-    env_name = kwargs['env_name']
 
-    def make_env(subrank=None):
-        env = gym.make(env_name)
-        if subrank is not None and logger.get_dir() is not None:
-            try:
-                from mpi4py import MPI
-                mpi_rank = MPI.COMM_WORLD.Get_rank()
-            except ImportError:
-                MPI = None
-                mpi_rank = 0
-                logger.warn('Running with a single MPI process. This should work, but the results may differ from the ones publshed in Plappert et al.')
-
-            max_episode_steps = env._max_episode_steps
-            env =  Monitor(env,
-                           os.path.join(logger.get_dir(), str(mpi_rank) + '.' + str(subrank)),
-                           allow_early_resets=True)
-            # hack to re-expose _max_episode_steps (ideally should replace reliance on it downstream)
-            env = gym.wrappers.TimeLimit(env, max_episode_steps=max_episode_steps)
-        return env
-
-    kwargs['make_env'] = make_env
-    tmp_env = cached_make_env(kwargs['make_env'])
-    assert hasattr(tmp_env, '_max_episode_steps')
-    kwargs['T'] = tmp_env._max_episode_steps
+    env = kwargs['env']
+    kwargs['T'] = env.max_episode_steps // env.num_skip_control
 
     kwargs['max_u'] = np.array(kwargs['max_u']) if isinstance(kwargs['max_u'], list) else kwargs['max_u']
     kwargs['gamma'] = 1. - 1. / kwargs['T']
@@ -125,8 +93,7 @@ def log_params(params, logger=logger):
 
 
 def configure_her(params):
-    env = cached_make_env(params['make_env'])
-    env.reset()
+    env = params['env']
 
     def reward_fun(ag_2, g, info):  # vectorized
         return env.compute_reward(achieved_goal=ag_2, desired_goal=g, info=info)
@@ -153,19 +120,17 @@ def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True):
     sample_her_transitions = configure_her(params)
     # Extract relevant parameters.
     gamma = params['gamma']
-    rollout_batch_size = params['rollout_batch_size']
     ddpg_params = params['ddpg_params']
 
     input_dims = dims.copy()
 
     # DDPG agent
-    env = cached_make_env(params['make_env'])
-    env.reset()
+    # env = cached_make_env(params['make_env'])
+    # env.reset()
     ddpg_params.update({'input_dims': input_dims,  # agent takes an input observations
                         'T': params['T'],
                         'clip_pos_returns': True,  # clip positive returns
                         'clip_return': (1. / (1. - gamma)) if clip_return else np.inf,  # max abs of return
-                        'rollout_batch_size': rollout_batch_size,
                         'subtract_goals': simple_goal_subtract,
                         'sample_transitions': sample_her_transitions,
                         'gamma': gamma,
@@ -176,26 +141,14 @@ def configure_ddpg(dims, params, reuse=False, use_mpi=True, clip_return=True):
                         'prm_loss_weight': params['prm_loss_weight'],
                         'aux_loss_weight': params['aux_loss_weight'],
                         })
-    ddpg_params['info'] = {
-        'env_name': params['env_name'],
-    }
     policy = DDPG(reuse=reuse, **ddpg_params, use_mpi=use_mpi)
     return policy
 
 
-def configure_dims(params):
-    env = cached_make_env(params['make_env'])
-    env.reset()
-    obs, _, _, info = env.step(env.action_space.sample())
-
+def configure_dims(env):
     dims = {
-        'o': obs['observation'].shape[0],
+        'o': env.observation_space.shape[0],
         'u': env.action_space.shape[0],
-        'g': obs['desired_goal'].shape[0],
-    }
-    for key, value in info.items():
-        value = np.array(value)
-        if value.ndim == 0:
-            value = value.reshape(1)
-        dims['info_{}'.format(key)] = value.shape[0]
+        'g': env.goal_dim,
+    }  # 自定义的环境中 obs 数据结构必须是带有 'observation' 和 'desired_goal' 的字典
     return dims

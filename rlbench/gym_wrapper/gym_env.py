@@ -7,8 +7,6 @@ from rlbench.action_config import ActionConfig, SnakeRobotActionConfig
 from rlbench.observation_config import ObservationConfig
 import numpy as np
 
-SKIP_CONTROL = 20
-
 
 class RLBenchEnv(gym.Env):
     """An gym wrapper for RLBench."""
@@ -16,11 +14,17 @@ class RLBenchEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self, task_class, observation_mode='state', action_mode='joint', multi_action_space=False):
+        self.num_skip_control = 20
+
         self._observation_mode = observation_mode
         self.obs_config = ObservationConfig()
         if observation_mode == 'state':
             self.obs_config.set_all_high_dim(False)
             self.obs_config.set_all_low_dim(True)
+        elif observation_mode == 'state-goal':
+            self.obs_config.set_all_high_dim(False)
+            self.obs_config.set_all_low_dim(True)
+            self.obs_config.set_goal_info(True)
         elif observation_mode == 'vision':
             self.obs_config.set_all(False)
             self.obs_config.set_camera_rgb(True)
@@ -41,7 +45,7 @@ class RLBenchEnv(gym.Env):
         self.env = Environment(action_config=self.ac_config, obs_config=self.obs_config, headless=True)
         self.env.launch()
         self.task = self.env.get_task(task_class)
-
+        self.max_episode_steps = self.task.episode_len
         _, obs = self.task.reset()
 
         if action_mode == 'joint':
@@ -64,13 +68,13 @@ class RLBenchEnv(gym.Env):
                 # high = np.array([1.0, 0.8, 0.8, 3.0, 5.0, 50, 10, 0.1, 0.1])
                 low = np.array([-1, -1, -1])
                 high = np.array([1, 1, 1])
-                # low = np.array([1.0])
-                # high = np.array([2.0])
                 self.action_space = spaces.Box(low=low, high=high, dtype=np.float32)
 
-        if observation_mode == 'state':
+        if observation_mode == 'state' or observation_mode == 'state-goal':
             self.observation_space = spaces.Box(
-                low=-np.inf, high=np.inf, shape=(obs.get_low_dim_data().shape[0]*SKIP_CONTROL,))
+                low=-np.inf, high=np.inf, shape=(obs.get_low_dim_data().shape[0]*self.num_skip_control,))
+            if observation_mode == 'state-goal':
+                self.goal_dim = obs.get_goal_dim()
         elif observation_mode == 'vision':
             self.observation_space = spaces.Box(
                     low=0, high=1, shape=obs.head_camera_rgb.shape)
@@ -90,6 +94,10 @@ class RLBenchEnv(gym.Env):
     def _extract_obs(self, obs):
         if self._observation_mode == 'state':
             return obs.get_low_dim_data()
+        elif self._observation_mode == 'state-goal':
+            obs_goal = {'observation': obs.get_low_dim_data()}
+            obs_goal.update(obs.get_goal_data())
+            return obs_goal
         elif self._observation_mode == 'vision':
             return obs.head_camera_rgb
         elif self._observation_mode == 'both':
@@ -108,29 +116,49 @@ class RLBenchEnv(gym.Env):
 
     def reset(self):
         obs_data_group = []
+        obs_data_dict = {'observation': [], 'desired_goal': None, 'achieved_goal': None}
         descriptions, obs = self.task.reset()
         obs_data = self._extract_obs(obs)
-        for _ in range(SKIP_CONTROL):
-            obs_data_group.extend(obs_data)
+        for _ in range(self.num_skip_control):
+            # obs_data_group.extend(obs_data)
+            if isinstance(obs_data, list) or isinstance(obs_data, np.ndarray):
+                obs_data_group.extend(obs_data)
+            elif isinstance(obs_data, dict):
+                obs_data_dict['observation'].extend(obs_data['observation'])
+                obs_data_dict['desired_goal'] = obs_data['desired_goal']
+                obs_data_dict['achieved_goal'] = obs_data['achieved_goal']
+        ret_obs = obs_data_group if len(obs_data_group) else obs_data_dict
         del descriptions  # Not used
-        return obs_data_group
+        return ret_obs
 
     def step(self, action):
         obs_data_group = []
+        obs_data_dict = {'observation': [], 'desired_goal': None, 'achieved_goal': None}
         reward_group = []
         terminate = False
-        for _ in range(SKIP_CONTROL):
+        for _ in range(self.num_skip_control):
             obs, reward, step_terminate = self.task.step(action)
             obs_data = self._extract_obs(obs)
-            obs_data_group.extend(obs_data)
+            if isinstance(obs_data, list) or isinstance(obs_data, np.ndarray):
+                obs_data_group.extend(obs_data)
+            elif isinstance(obs_data, dict):
+                obs_data_dict['observation'].extend(obs_data['observation'])
+                obs_data_dict['desired_goal'] = obs_data['desired_goal']
+                obs_data_dict['achieved_goal'] = obs_data['achieved_goal']
             reward_group.append(reward)
             terminate |= step_terminate
             if terminate:
                 break
-        return obs_data_group, np.mean(reward_group), terminate, {}
+        ret_obs = obs_data_group if len(obs_data_group) else obs_data_dict
+        return ret_obs, np.mean(reward_group), terminate, {}
 
     def close(self):
         self.env.shutdown()
 
-    def load_env_param(self):
-        self.env.load_env_param()
+    # def load_env_param(self):
+    #     self.env.load_env_param()
+
+    def compute_reward(self, achieved_goal=None, desired_goal=None, info=None):
+        assert achieved_goal is not None
+        assert desired_goal is not None
+        return self.task.compute_reward(achieved_goal, desired_goal)

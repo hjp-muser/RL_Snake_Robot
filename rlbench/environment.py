@@ -115,5 +115,5 @@ class Environment(object):
             self._action_config, self._dataset_root, self._obs_config,
             self._static_positions)
 
-    def load_env_param(self):
-        self._scene.load_obs_normalizer()
+    # def load_env_param(self):
+    #     self._scene.load_obs_normalizer()
