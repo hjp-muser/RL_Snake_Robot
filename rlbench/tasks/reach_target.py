@@ -2,6 +2,7 @@ from typing import List
 import numpy as np
 from collections import deque
 
+from numpy.core._multiarray_umath import ndarray
 from pyrep import PyRep
 from pyrep.objects.shape import Shape
 from pyrep.objects.proximity_sensor import ProximitySensor
@@ -63,18 +64,27 @@ class ReachTarget(Task):
         self.target.set_color(color_rgb)
 
         # set random position of the target
-        rand_x = np.random.rand()
-        rand_y = np.random.rand()
+        rand_x = np.random.uniform(1.0, 0.0)
+        arc_angle = 70
+        radius = 1.6
+        radius_cos = radius * np.cos(np.deg2rad(arc_angle / 2))
+        if rand_x < radius - radius_cos:
+            ymax = np.sqrt(radius**2 - (rand_x-radius)**2)
+            rand_y = np.random.uniform(-ymax, ymax)
+        else:
+            ymax = (radius-rand_x) * np.tan(np.deg2rad(arc_angle / 2))
+            rand_y = np.random.uniform(-ymax, ymax)
+
         self.target.set_position([rand_x, rand_y, 0.04])
         self.success_sensor.set_position([rand_x, rand_y, 0.04])
-        # self.target.set_position([0.2, -0.2, 0.04])
-        # self.success_sensor.set_position([0.2, -0.2, 0.04])
+        # self.target.set_position([0.0, 0.3, 0.04])
+        # self.success_sensor.set_position([0.0, 0.3, 0.04])
 
         self._tar_pos = np.array(self.target.get_position())
         self._last_rob_pos_queue = deque(maxlen=50)
         self._last_rob_pos_queue.append(np.array(self.robot.robot_body.get_snake_head_pos()))
-        cur_age_pos = np.array(self.robot.robot_body.get_snake_head_pos())
-        self.init_tar_rob_dis = np.sqrt(np.sum((self._tar_pos[:2] - cur_age_pos[:2]) ** 2))
+        cur_head_pos = np.array(self.robot.robot_body.get_snake_head_pos())
+        self.init_tar_rob_dis = np.sqrt(np.sum((self._tar_pos[:2] - cur_head_pos[:2]) ** 2))
 
         self.robot.robot_body.init_state()
 
@@ -90,15 +100,20 @@ class ReachTarget(Task):
         return self.get_target_pos()[:2]
 
     def get_short_term_reward(self) -> int:
-        cur_age_pos = np.array(self.robot.robot_body.get_snake_head_pos())
-        cur_dis = np.sqrt(np.sum((self._tar_pos[:2] - cur_age_pos[:2]) ** 2))
+        cur_head_pos = np.array(self.robot.robot_body.get_snake_head_pos())
+        cur_tail_pos = np.array(self.robot.robot_body.get_snake_tail_pos())
+        cur_dis = np.sqrt(np.sum((self._tar_pos[:2] - cur_head_pos[:2]) ** 2))
+        body_len = np.sqrt(np.sum((cur_tail_pos[:2] - cur_head_pos[:2]) ** 2))
+        dis_reward = - cur_dis / self.init_tar_rob_dis
+        dis_reward = np.clip(dis_reward, -1, 0)
+
         if len(self._last_rob_pos_queue) == 50:
             last_rob_pos = self._last_rob_pos_queue[0]
             last_dis = np.sqrt(np.sum((self._tar_pos[:2] - last_rob_pos[:2]) ** 2))
             dis_del_reward = last_dis - cur_dis
         else:
             dis_del_reward = 0
-        self._last_rob_pos_queue.append(cur_age_pos)
+        self._last_rob_pos_queue.append(cur_head_pos)
         if self.dis_del_reward_min is None:
             self.dis_del_reward_min = dis_del_reward
             self.dis_del_reward_max = dis_del_reward
@@ -109,9 +124,15 @@ class ReachTarget(Task):
         if self.dis_del_reward_min != self.dis_del_reward_max:
             dis_del_reward = (dis_del_reward - self.dis_del_reward_min) / (self.dis_del_reward_max - self.dis_del_reward_min) - 1
 
-        k = (cur_age_pos[1] - self._tar_pos[1]) / (cur_age_pos[0] - self._tar_pos[0] + 1e-8)
-        angle_reward = -np.clip(np.abs(np.arctan(k)), 0, 1)
+        k1 = (cur_head_pos[1] - self._tar_pos[1]) / (cur_head_pos[0] - self._tar_pos[0] + 1e-9)
+        angle_reward = -np.clip(np.abs(np.arctan(k1)), 0, 1)
 
+        k2 = (cur_tail_pos[1] - cur_head_pos[1]) / (cur_tail_pos[0] - cur_head_pos[0] + 1e-9)
+        posture_reward = -np.clip(np.abs(np.arctan(k2)), 0, 1)
+
+        cos_angle = [(self._tar_pos[0] - cur_head_pos[0]) * (cur_tail_pos[0] - cur_head_pos[0]) +
+                     (self._tar_pos[1] - cur_head_pos[1]) * (cur_tail_pos[1] - cur_head_pos[1])] / (cur_dis * body_len)
+        angle_reward2 = np.abs(np.arccos(cos_angle)) - 1
         # if self.angle_reward_min is None:
         #     self.angle_reward_min = angle_reward
         #     self.angle_reward_max = angle_reward
@@ -121,12 +142,13 @@ class ReachTarget(Task):
         #     self.angle_reward_max = angle_reward
         # if self.angle_reward_min != self.angle_reward_max:
         #     angle_reward = (angle_reward - self.angle_reward_min) / (self.angle_reward_max - self.angle_reward_min)
-
-        dis_reward = - cur_dis / self.init_tar_rob_dis
-        dis_reward = np.clip(dis_reward, -1, 0)
-
         # print(dis_del_reward, dis_reward, angle_reward)
-        return dis_reward
+        w1 = 1 - dis_reward / (dis_reward + angle_reward + posture_reward)
+        w2 = 1 - angle_reward / (dis_reward + angle_reward + posture_reward)
+        w3 = 1 - posture_reward / (dis_reward + angle_reward + posture_reward)
+        return dis_reward * w1 + angle_reward * w2 + posture_reward * w3
+        # return dis_reward + 0.1 * angle_reward + 0.1 * posture_reward
+        # return dis_reward + 0.1 * angle_reward2
 
     def get_long_term_reward(self, timeout) -> int:
         success, _ = self.success()
@@ -136,8 +158,8 @@ class ReachTarget(Task):
         elif fail:
             return -2
         elif timeout:
-            cur_age_pos = np.array(self.robot.robot_body.get_snake_head_pos())
-            cur_dis = np.sqrt(np.sum((self._tar_pos[:2] - cur_age_pos[:2]) ** 2))
+            cur_head_pos = np.array(self.robot.robot_body.get_snake_head_pos())
+            cur_dis = np.sqrt(np.sum((self._tar_pos[:2] - cur_head_pos[:2]) ** 2))
             timeout_reward = 2 * (1 - cur_dis / self.init_tar_rob_dis) - 1
             timeout_reward = np.clip(timeout_reward, -1, 1)
             return timeout_reward * 100
