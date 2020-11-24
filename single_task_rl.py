@@ -17,10 +17,10 @@ class Agent(object):
         for i in range(self.action_size):
             if i % 2 == 0:
                 # joints[i] = 0.7 * np.sin(2 * self.clk + (i / 2) * 30) + 0
-                joints[i] = 0.7 * np.sin(2 * self.clk + (i/2) * 30 + 60)
+                joints[i] = 0.5 * np.sin(2 * self.clk + (i/2) * 30)
             else:
                 # joints[i] = 0.7 * np.sin(2 * self.clk + (i/2) * 30 + 12) + 0
-                joints[i] = 0.5 * np.sin(4 * self.clk + (i/2) * 30)
+                joints[i] = 0.5 * np.sin(4 * self.clk + (i/2) * 30 + np.pi)
 
         # return (np.random.normal(-0.7, 0.7, size=(self.action_size,))).tolist()
         self.clk += 0.05

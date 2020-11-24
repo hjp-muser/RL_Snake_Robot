@@ -137,7 +137,7 @@ def main(args):
     if args.play:
         logger.log("Running trained model")
         # model.load_newest()
-        model.load_index(0)
+        model.load_index(4)
         # for i in range(len(env.envs)):
         #     env.envs[i].load_env_param()
         obs = env.reset()
@@ -202,8 +202,7 @@ if __name__ == '__main__':
 
     ppo_args = ['--env=reach_target-state-param-v0', '--alg=ppo', '--total_timesteps=1e6']
     ppo_play = ['--env=reach_target-state-param-v0', '--alg=ppo', '--total_timesteps=0', '--play']
-
     ###########################################################################################################
     her_args = ['--env=reach_target-state-goal-param-v0', '--alg=her', '--total_timesteps=1e6']
 
-    main(ppo_play)
+    main(ppo_args)
