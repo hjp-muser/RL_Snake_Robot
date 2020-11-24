@@ -181,7 +181,7 @@ class TaskEnvironment(object):
         #     reward = short_term_reward + long_term_reward * 100
         reward = short_term_reward
 
-        return self._scene.get_observation(), reward, done
+        return self._scene.get_observation(), reward, done, success
 
     def compute_reward(self, achieved_goal, desired_goal):
         return self._task.compute_reward(achieved_goal, desired_goal)

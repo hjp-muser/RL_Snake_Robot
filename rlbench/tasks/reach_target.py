@@ -63,12 +63,23 @@ class ReachTarget(Task):
         self.target.set_color(color_rgb)
 
         # set random position of the target
-        rand_x = np.random.rand()
-        rand_y = np.random.rand()
+        # rand_x = np.random.rand()
+        # rand_y = np.random.rand()
+
+        rand_x = np.random.uniform(0.0, 1.0)
+        arc_angle = 70
+        radius = 1.6
+        radius_cos = radius * np.cos(np.deg2rad(arc_angle/2))
+        if rand_x < radius - radius_cos:
+            ymax = np.sqrt(radius**2 - (rand_x-radius)**2)
+        else:
+            ymax = (radius - rand_x) * np.tan(np.deg2rad(arc_angle/2))
+        rand_y = np.random.uniform(-ymax, ymax)
+
         self.target.set_position([rand_x, rand_y, 0.04])
         self.success_sensor.set_position([rand_x, rand_y, 0.04])
-        # self.target.set_position([0.2, -0.2, 0.04])
-        # self.success_sensor.set_position([0.2, -0.2, 0.04])
+        # self.target.set_position([0.4, -1.0, 0.04])
+        # self.success_sensor.set_position([0.4, -1.0, 0.04])
 
         self._tar_pos = np.array(self.target.get_position())
         self._last_rob_pos_queue = deque(maxlen=50)

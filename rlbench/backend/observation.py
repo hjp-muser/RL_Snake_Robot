@@ -60,6 +60,9 @@ class Observation(object):
         flatten_data = np.concatenate(flatten_data)
         return flatten_data
 
+    def get_2d_robot_pos(self) -> np.ndarray:
+        return self.robot_pos[:2]
+
     @property
     def shape(self) -> tuple:
         flatten_data = self.get_flatten_data()

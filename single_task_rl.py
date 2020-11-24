@@ -51,7 +51,7 @@ for i in range(training_steps):
         # print(descriptions)
     action = agent.act(obs)
     # print(action)
-    obs, reward, terminate = task.step(action)
+    obs, reward, terminate, _ = task.step(action)
 
 print('Done')
 env.shutdown()

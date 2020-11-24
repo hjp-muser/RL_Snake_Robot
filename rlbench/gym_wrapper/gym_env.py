@@ -5,7 +5,9 @@ from pyrep.objects.vision_sensor import VisionSensor
 from rlbench.environment import Environment
 from rlbench.action_config import ActionConfig, SnakeRobotActionConfig
 from rlbench.observation_config import ObservationConfig
+
 import numpy as np
+import glob
 
 
 class RLBenchEnv(gym.Env):
@@ -15,6 +17,9 @@ class RLBenchEnv(gym.Env):
 
     def __init__(self, task_class, observation_mode='state', action_mode='joint', multi_action_space=False):
         self.num_skip_control = 20
+        self.epi_obs = []
+        self.obs_record = True
+        self.obs_record_id = None
 
         self._observation_mode = observation_mode
         self.obs_config = ObservationConfig()
@@ -118,6 +123,7 @@ class RLBenchEnv(gym.Env):
         obs_data_group = []
         obs_data_dict = {'observation': [], 'desired_goal': None, 'achieved_goal': None}
         descriptions, obs = self.task.reset()
+        self.epi_obs.append(obs)
         obs_data = self._extract_obs(obs)
         for _ in range(self.num_skip_control):
             # obs_data_group.extend(obs_data)
@@ -137,17 +143,21 @@ class RLBenchEnv(gym.Env):
         reward_group = []
         terminate = False
         for _ in range(self.num_skip_control):
-            obs, reward, step_terminate = self.task.step(action)
+            obs, reward, step_terminate, success = self.task.step(action)
+            self.epi_obs.append(obs)
             obs_data = self._extract_obs(obs)
             if isinstance(obs_data, list) or isinstance(obs_data, np.ndarray):
                 obs_data_group.extend(obs_data)
-            elif isinstance(obs_data, dict):
+            elif isinstance(obs_data, dict):    # used for hierarchical reinforcement algorithm
                 obs_data_dict['observation'].extend(obs_data['observation'])
                 obs_data_dict['desired_goal'] = obs_data['desired_goal']
                 obs_data_dict['achieved_goal'] = obs_data['achieved_goal']
             reward_group.append(reward)
             terminate |= step_terminate
             if terminate:
+                if self.obs_record and success:  # record a successful experience
+                    self.record_obs("RobotPos")
+                self.epi_obs = []
                 break
         ret_obs = obs_data_group if len(obs_data_group) else obs_data_dict
         return ret_obs, np.mean(reward_group), terminate, {}
@@ -162,3 +172,31 @@ class RLBenchEnv(gym.Env):
         assert achieved_goal is not None
         assert desired_goal is not None
         return self.task.compute_reward(achieved_goal, desired_goal)
+
+    def record_obs(self, obs_part):
+        if self.obs_record_id is None:
+            record_filenames = glob.glob("./obs_record/obs_record_*.txt")
+            record_filenames.sort(key=lambda filename: int(filename.split('_')[-1].split('.')[0]))
+            if len(record_filenames) == 0:
+                self.obs_record_id = 1
+            else:
+                last_id = int(record_filenames[-1].split('_')[-1].split('.')[0])
+                self.obs_record_id = last_id + 1
+        else:
+            self.obs_record_id += 1
+        filename = './obs_record/obs_record_'+str(self.obs_record_id)+'.txt'
+        obs_record_file = open(filename, 'w')
+
+        if obs_part == 'All':
+            pass
+        if obs_part == 'RobotPos':
+            robot_pos_arr = []
+            for obs in self.epi_obs:
+                robot_pos = obs.get_2d_robot_pos()
+                robot_pos_arr.append(robot_pos)
+            target_pos = self.task.get_goal()
+            robot_pos_arr.append(target_pos)        # The last line records the target position
+            robot_pos_arr = np.array(robot_pos_arr)
+            np.savetxt(obs_record_file, robot_pos_arr, fmt="%f")
+        obs_record_file.close()
+

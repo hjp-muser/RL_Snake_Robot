@@ -206,4 +206,4 @@ if __name__ == '__main__':
     ###########################################################################################################
     her_args = ['--env=reach_target-state-goal-param-v0', '--alg=her', '--total_timesteps=1e6']
 
-    main(ppo_args)
+    main(ppo_play)

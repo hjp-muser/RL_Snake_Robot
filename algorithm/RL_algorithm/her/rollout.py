@@ -70,6 +70,7 @@ class RolloutWorker:
         dones = []
         info_values = [np.empty((self.T - 1, self.dims['info_' + key]), np.float32) for key in self.info_keys]
         Qs = []
+        reward_sum = 0
         for t in range(self.T):
             policy_output = self.policy.get_actions(
                 o, ag, self.g,
@@ -85,7 +86,8 @@ class RolloutWorker:
                 u = policy_output
 
             # compute new states and observations
-            obs_dict_new, _, done, info = self.venv.step(u)
+            obs_dict_new, reward, done, info = self.venv.step(u)
+            reward_sum += reward
             o_new = obs_dict_new['observation']
             ag_new = obs_dict_new['achieved_goal']
             success = info.get('is_success', 0.0)
@@ -110,6 +112,7 @@ class RolloutWorker:
             goals.append(self.g.copy())
             o[...] = o_new
             ag[...] = ag_new
+        print("reward: ", reward_sum)
         obs.append(o.copy())
         achieved_goals.append(ag.copy())
 
