@@ -144,7 +144,9 @@ rlbench/robot_ttms/rattler(复件).ttm
 rlbench/task_ttms/reach_target(复件).ttm
 
 *.txt
-
+data/
+rlbench/robot_ttms/rattler (copy).ttm
+rlbench/task_ttms/reach_target (copy).ttm
 
 
 
