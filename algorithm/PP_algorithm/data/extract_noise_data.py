@@ -1,5 +1,6 @@
 import numpy as np
 import glob
+import matplotlib.pyplot as plt
 import os
 
 def read_from_file(file_name):
@@ -38,15 +39,26 @@ if __name__ == "__main__":
         tar_pos = data[-1]
         k = (tar_pos[1] - rob_pos[1]) / (tar_pos[0] - rob_pos[0] + 1e-9)
         b = rob_pos[1] - k * rob_pos[0]
-        opt_x = np.linspace(rob_pos[0], tar_pos[0], SAMPLE_NUM)
+        opt_x = np.linspace(rob_pos[0], tar_pos[0], size)
         opt_y = k * opt_x + b
         opt_xy = np.array(list(zip(opt_x, opt_y)))  # 最优路径
-        xnoise = data[idx, 0] - opt_xy[:, 0]
-        ynoise = data[idx, 1] - opt_xy[:, 1]
-        xnoise = np.concatenate((rob_pos, tar_pos, xnoise))
-        ynoise = np.concatenate((rob_pos, tar_pos, ynoise))
-        np.savetxt(xndatafile, xnoise[np.newaxis, :], "%.6f")
-        np.savetxt(yndatafile, ynoise[np.newaxis, :], "%.6f")
+        # xnoise = data[idx, 0] - opt_xy[:, 0]
+        # ynoise = data[idx, 1] - opt_xy[:, 1]
+        # xnoise = data[:, 0] - opt_xy[:, 0]
+        ynoise = data[:, 1][:500] - opt_xy[:, 1][:500]
+        plt.plot(data[:, 1][:500], c='r')
+        # plt.plot(data[:, 0])
+        # plt.plot(opt_xy[:, 0])
+        plt.plot(opt_xy[:, 1][:500], c='g')
+        plt.plot(ynoise, c='b')
+        plt.xlim(0, 1400)
+        plt.ylim(-1.0, 1.5)
+        # plt.show()
+    plt.show()
+        # xnoise = np.concatenate((rob_pos, tar_pos, xnoise))
+        # ynoise = np.concatenate((rob_pos, tar_pos, ynoise))
+        # np.savetxt(xndatafile, xnoise[np.newaxis, :], "%.6f")
+        # np.savetxt(yndatafile, ynoise[np.newaxis, :], "%.6f")
     # xndatafile.seek(0)
     # data = np.loadtxt(xndatafile_name)
     # print(data)

@@ -98,8 +98,8 @@ class MultiActorCriticPolicy(BasePolicy):
         Returns the policy for a single step
 
         :param obs: ([float] or [int]) The current observation of the environment
-        :param state: ([float]) The last states (used in recurrent policies)
-        :param mask: ([float]) The last masks (used in recurrent policies)
+        :param state: ([float]) The last states (used in recurrent policies.py)
+        :param mask: ([float]) The last masks (used in recurrent policies.py)
         :param deterministic: (bool) Whether or not to return deterministic actions.
         :return: ([float], [float], [float], [float]) actions, values, states, neglogp
         """
@@ -111,8 +111,8 @@ class MultiActorCriticPolicy(BasePolicy):
         Returns the value for a single step
 
         :param obs: ([float] or [int]) The current observation of the environment
-        :param state: ([float]) The last states (used in recurrent policies)
-        :param mask: ([float]) The last masks (used in recurrent policies)
+        :param state: ([float]) The last states (used in recurrent policies.py)
+        :param mask: ([float]) The last masks (used in recurrent policies.py)
         :return: ([float]) The associated value of the action
         """
         raise NotImplementedError
