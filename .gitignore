@@ -147,6 +147,6 @@ rlbench/task_ttms/reach_target(复件).ttm
 data/
 rlbench/robot_ttms/rattler (copy).ttm
 rlbench/task_ttms/reach_target (copy).ttm
-
+algorithm/PP_algorithm/data/extract_noise_data.py
 
 
