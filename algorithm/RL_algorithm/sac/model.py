@@ -59,7 +59,7 @@ class Model(object):
             -----------
 
             :param network: policy network architecture. Either string (mlp, lstm, lnlstm, cnn_lstm, cnn, cnn_small,
-                    conv_only - see policies.py for full list) specifying the standard network architecture, or a
+                    conv_only - see policies.py.py for full list) specifying the standard network architecture, or a
                     function that takes tensorflow tensor as input and returns tuple (output_tensor, extra_feed)
                     where output tensor is the last network layer output
 

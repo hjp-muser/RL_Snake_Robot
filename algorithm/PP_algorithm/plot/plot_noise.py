@@ -45,36 +45,36 @@ if __name__ == "__main__":
         opt_x = np.linspace(rob_pos[0], tar_pos[0], SAMPLE_NUM)
         opt_y = k * opt_x + b
 
-        # plt.figure(1)
-        # plt.plot(data[idx, 0], data[idx, 1])
-        # plt.plot(opt_x, opt_y, color='k')
+        plt.figure(1)
+        plt.plot(data[idx, 0], data[idx, 1])
+        plt.plot(opt_x, opt_y, color='k')
 
         opt_xy = np.array(list(zip(opt_x, opt_y)))  # 最优路径
         xnoise = data[idx, 0] - opt_xy[:, 0]
         ynoise = data[idx, 1] - opt_xy[:, 1]
-        # xnoise_id = np.where(np.abs(xnoise) < 0.1)
-        # ynoise_id = np.where(np.abs(ynoise) < 0.25)
-        # plt.figure(2)
-        # plt.xlim(0, SAMPLE_NUM)
-        # plt.ylim(-0.3, 0.5)
-        # plt.plot(xnoise, color=color)
-        # plt.figure(3)
-        # plt.xlim(0, SAMPLE_NUM)
-        # plt.ylim(-1.5, 0.6)
-        # plt.plot(ynoise, color=color)
-
+        xnoise_id = np.where(np.abs(xnoise) < 0.1)
+        ynoise_id = np.where(np.abs(ynoise) < 0.25)
+        plt.figure(2)
+        plt.xlim(0, SAMPLE_NUM)
+        plt.ylim(-0.3, 0.5)
+        plt.plot(xnoise, color=color)
+        plt.figure(3)
+        plt.xlim(0, SAMPLE_NUM)
+        plt.ylim(-1.5, 0.6)
+        plt.plot(ynoise, color=color)
+        plt.show()
         # print(np.std(ynoise))
         # if xnoise_id[0].shape[0] > SAMPLE_NUM/2 and np.all(np.abs(xnoise) < 0.2) and ynoise_id[0].shape[0] > SAMPLE_NUM/3 and np.all(np.abs(ynoise) < 0.5) :
-        if np.std(ynoise) < 0.148 and np.std(xnoise) < 0.02:
-            print('target_pos: (', opt_x[-1], ',', opt_y[-1], ')')
-            plt.figure(4)
-            plt.plot(xnoise, color=color)
-            plt.xlim(0, SAMPLE_NUM)
-            plt.ylim(-0.3, 0.5)
-            plt.figure(5)
-            plt.plot(ynoise, color=color)
-            plt.xlim(0, SAMPLE_NUM)
-            plt.ylim(-1.5, 0.6)
+        # if np.std(ynoise) < 0.148 and np.std(xnoise) < 0.02:
+        #     print('target_pos: (', opt_x[-1], ',', opt_y[-1], ')')
+        #     plt.figure(4)
+        #     plt.plot(xnoise, color=color)
+        #     plt.xlim(0, SAMPLE_NUM)
+        #     plt.ylim(-0.3, 0.5)
+        #     plt.figure(5)
+        #     plt.plot(ynoise, color=color)
+        #     plt.xlim(0, SAMPLE_NUM)
+        #     plt.ylim(-1.5, 0.6)
         # elif np.std(ynoise) < 0.148:
         #     print('target_pos: (', opt_x[-1], ',', opt_y[-1], ')')
         #     plt.figure(6)

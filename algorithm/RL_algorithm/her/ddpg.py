@@ -455,7 +455,7 @@ class DDPG(object):
             return logs
 
     def __getstate__(self):
-        """Our policies can be loaded from pkl, but after unpickling you cannot continue training.
+        """Our policies.py can be loaded from pkl, but after unpickling you cannot continue training.
         """
         excluded_subnames = ['_tf', '_op', '_vars', '_adam', 'buffer', 'sess', '_stats',
                              'main', 'target', 'lock', 'env', 'sample_transitions',

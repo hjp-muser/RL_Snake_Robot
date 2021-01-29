@@ -74,10 +74,10 @@ class BasePolicy(ABC):
     @property
     def initial_state(self):
         """
-        The initial state of the policy. For feedforward policies, None. For a recurrent policy,
+        The initial state of the policy. For feedforward policies.py, None. For a recurrent policy,
         a NumPy array of shape (self.n_env, ) + state_shape.
         """
-        assert not self.recurrent, "When using recurrent policies, you must overwrite `initial_state()` method"
+        assert not self.recurrent, "When using recurrent policies.py, you must overwrite `initial_state()` method"
         return None
 
     @property
@@ -122,8 +122,8 @@ class BasePolicy(ABC):
         Returns the policy for a single step
 
         :param obs: ([float] or [int]) The current observation of the environment
-        :param state: ([float]) The last states (used in recurrent policies)
-        :param mask: ([float]) The last masks (used in recurrent policies)
+        :param state: ([float]) The last states (used in recurrent policies.py)
+        :param mask: ([float]) The last masks (used in recurrent policies.py)
         :return: ([float], [float], [float], [float]) actions, values, states, neglogp
         """
         raise NotImplementedError
@@ -134,8 +134,8 @@ class BasePolicy(ABC):
         Returns the action probability for a single step
 
         :param obs: ([float] or [int]) The current observation of the environment
-        :param state: ([float]) The last states (used in recurrent policies)
-        :param mask: ([float]) The last masks (used in recurrent policies)
+        :param state: ([float]) The last states (used in recurrent policies.py)
+        :param mask: ([float]) The last masks (used in recurrent policies.py)
         :return: ([float]) the action probability
         """
         raise NotImplementedError
@@ -236,8 +236,8 @@ class ActorCriticPolicy(BasePolicy):
         Returns the policy for a single step
 
         :param obs: ([float] or [int]) The current observation of the environment
-        :param state: ([float]) The last states (used in recurrent policies)
-        :param mask: ([float]) The last masks (used in recurrent policies)
+        :param state: ([float]) The last states (used in recurrent policies.py)
+        :param mask: ([float]) The last masks (used in recurrent policies.py)
         :param deterministic: (bool) Whether or not to return deterministic actions.
         :return: ([float], [float], [float], [float]) actions, values, states, neglogp
         """
@@ -249,8 +249,8 @@ class ActorCriticPolicy(BasePolicy):
         Returns the value for a single step
 
         :param obs: ([float] or [int]) The current observation of the environment
-        :param state: ([float]) The last states (used in recurrent policies)
-        :param mask: ([float]) The last masks (used in recurrent policies)
+        :param state: ([float]) The last states (used in recurrent policies.py)
+        :param mask: ([float]) The last masks (used in recurrent policies.py)
         :return: ([float]) The associated value of the action
         """
         raise NotImplementedError

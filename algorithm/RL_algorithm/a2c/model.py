@@ -50,11 +50,11 @@ class Model(object):
         Parameters:
         -----------
 
-        :param network: policy network architecture. Either string (mlp, lstm, lnlstm, cnn_lstm, cnn, cnn_small, conv_only - see policies.py for full list)
+        :param network: policy network architecture. Either string (mlp, lstm, lnlstm, cnn_lstm, cnn, cnn_small, conv_only - see policies.py.py for full list)
                 specifying the standard network architecture, or a function that takes tensorflow tensor as input and returns
                 tuple (output_tensor, extra_feed) where output tensor is the last network layer output, extra_feed is None for feed-forward
                 neural nets, and extra_feed is a dictionary describing how to feed state into the network for recurrent neural nets.
-                See policies.py for more details on using recurrent nets in policies
+                See policies.py.py for more details on using recurrent nets in policies.py
 
         :param env: RL environment. Should implement interface similar to VecEnv (baselines.common/vec_env) or be wrapped with DummyVecEnv (baselines.common/vec_env/dummy_vec_env.py)
 

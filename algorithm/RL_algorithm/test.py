@@ -205,4 +205,7 @@ if __name__ == '__main__':
     ###########################################################################################################
     her_args = ['--env=reach_target-state-goal-param-v0', '--alg=her', '--total_timesteps=1e6']
 
-    main(ppo_play)
+    soppo_args = ['--env=reach_target-state-param-v0', '--alg=soppo', '--total_timesteps=1e6']
+    soppo_play = ['--env=reach_target-state-param-v0', '--alg=soppo', '--total_timesteps=0', '--play']
+
+    main(ppo_args)

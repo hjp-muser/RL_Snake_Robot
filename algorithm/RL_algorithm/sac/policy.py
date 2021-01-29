@@ -119,8 +119,8 @@ class SACPolicy(BasePolicy):
         Returns the policy for a single step
 
         :param obs: ([float] or [int]) The current observation of the environment
-        :param state: ([float]) The last states (used in recurrent policies)
-        :param mask: ([float]) The last masks (used in recurrent policies)
+        :param state: ([float]) The last states (used in recurrent policies.py)
+        :param mask: ([float]) The last masks (used in recurrent policies.py)
         :param deterministic: (bool) Whether or not to return deterministic actions.
         :return: ([float]) actions
         """
@@ -131,8 +131,8 @@ class SACPolicy(BasePolicy):
         Returns the action probability params (mean, std) for a single step
 
         :param obs: ([float] or [int]) The current observation of the environment
-        :param state: ([float]) The last states (used in recurrent policies)
-        :param mask: ([float]) The last masks (used in recurrent policies)
+        :param state: ([float]) The last states (used in recurrent policies.py)
+        :param mask: ([float]) The last masks (used in recurrent policies.py)
         :return: ([float], [float])
         """
         raise NotImplementedError
