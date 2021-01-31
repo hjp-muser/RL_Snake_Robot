@@ -76,23 +76,21 @@ class ValueModel(object):
         tf_util.load_state(load_path, sess=self.sess)
 
 
-def build_value(env, network_type, normalize_observations=False, **network_kwargs):
-    if isinstance(network_type, str):
-        value_network = get_network_builder(network_type)(**network_kwargs)
+def build_value(env, value_network, **network_kwargs):
+    if isinstance(value_network, str):
+        value_network = get_network_builder(value_network)(**network_kwargs)
+    else:
+        assert callable(value_network)
 
-    def value_fn(nbatch=None, sess=None, observ_placeholder=None):
+    def value_fn(obs_ph=None, normalize_observations=False, sess=None):
         ob_space = env.observation_space
-
-        X = observ_placeholder if observ_placeholder is not None else observation_placeholder(ob_space, batch_size=nbatch)
-
+        X = obs_ph if obs_ph is not None else observation_placeholder(ob_space)
         extra_tensors = {}
-
         if normalize_observations and X.dtype == tf.float32:
             encoded_x, rms = _normalize_clip_observation(X)
             extra_tensors['rms'] = rms
         else:
             encoded_x = X
-
         encoded_x = encode_observation(ob_space, encoded_x)
 
         with tf.variable_scope('vf', reuse=tf.AUTO_REUSE):

@@ -208,4 +208,4 @@ if __name__ == '__main__':
     soppo_args = ['--env=reach_target-state-param-v0', '--alg=soppo', '--total_timesteps=1e6']
     soppo_play = ['--env=reach_target-state-param-v0', '--alg=soppo', '--total_timesteps=0', '--play']
 
-    main(ppo_args)
+    main(soppo_play)

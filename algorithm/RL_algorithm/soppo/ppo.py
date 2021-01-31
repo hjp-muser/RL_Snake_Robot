@@ -31,7 +31,7 @@ def constfn(val):
 
 
 class Model(object):
-    def __init__(self, *, network, env, lr=3e-4, cliprange=0.2, nsteps=128, nminibatches=4,
+    def __init__(self, *, network, env, obs_ph=None, lr=3e-4, cliprange=0.2, nsteps=128, nminibatches=4,
                  ent_coef=0.0, vf_coef=0.25, max_grad_norm=0.5, gamma=0.99, lam=0.95, mpi_rank_weight=1,
                  comm=None, load_path=None, **network_kwargs):
 
@@ -87,6 +87,7 @@ class Model(object):
         self.sess = sess = get_session()
 
         self.env = env
+        self.obs_ph = obs_ph
 
         if isinstance(lr, float):
             self.lr = constfn(lr)
@@ -105,24 +106,18 @@ class Model(object):
         self.nbatch_train = self.nbatch // nminibatches
 
         with tf.variable_scope('ppo2_model', reuse=tf.AUTO_REUSE):
+            # create vf model
             # default: mlp value network
             value_network = build_value(env, network, **network_kwargs)
-            act_vmodel = value_network(self.nenvs, sess)
-            train_vmodel = value_network(self.nbatch_train, sess)
+            vf_model = value_network(obs_ph=self.obs_ph, sess=self.sess)
 
+            # create policy model
             # default: mlp policy network
             policy_network = build_policy(env, network, estimate_q=False, **network_kwargs)
-
-            # CREATE OUR TWO MODELS
-            # act_pmodel that is used for sampling
-            # act_pmodel = policy(self.nenvs, sess)
-            act_pmodel = policy_network(self.nenvs, sess)  # , act_vmodel.vf_latent
-            # Train model for training
-            # train_pmodel = policy(self.nbatch_train, sess)
-            train_pmodel = policy_network(self.nbatch_train, sess)  # , train_vmodel.vf_latent
+            policy_model = policy_network(obs_ph=self.obs_ph, sess=self.sess, vf_latent=vf_model.vf_latent)
 
         # CREATE THE PLACEHOLDERS
-        self.A = A = train_pmodel.pdtype.sample_placeholder([None])  # action placeholder
+        self.A = A = policy_model.pdtype.sample_placeholder([None])
         self.ADV = ADV = tf.placeholder(tf.float32, [None])
         self.R = R = tf.placeholder(tf.float32, [None])
         # Keep track of old actor
@@ -133,16 +128,16 @@ class Model(object):
         # Cliprange
         self.CLIPRANGE = CLIPRANGE = tf.placeholder(tf.float32, [])
 
-        neglogpac = train_pmodel.pd.neglogp(A)
+        neglogpac = policy_model.cal_action_neglogp(A)
 
         # Calculate the entropy
         # Entropy is used to improve exploration by limiting the premature convergence to suboptimal policy.
-        entropy = tf.reduce_mean(train_pmodel.pd.entropy())
+        entropy = tf.reduce_mean(policy_model.cal_entropy())
 
         # Clip the value to reduce variability during Critic training
         # Get the predicted value
-        vpred = train_pmodel.vf
-        vpredclipped = OLDVPRED + tf.clip_by_value(train_pmodel.vf - OLDVPRED, - CLIPRANGE, CLIPRANGE)
+        vpred = policy_model.vf
+        vpredclipped = OLDVPRED + tf.clip_by_value(policy_model.vf - OLDVPRED, - CLIPRANGE, CLIPRANGE)
         # Unclipped value
         vf_losses1 = tf.square(vpred - R)
         # Clipped value
@@ -188,10 +183,9 @@ class Model(object):
         self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
         self.stats_list = [pg_loss, vf_loss, entropy, approxkl, clipfrac]
 
-        self.train_pmodel = train_pmodel
-        self.act_pmodel = act_pmodel
-        self.step = act_pmodel.step
-        self.value = act_pmodel.estimate_v
+        self.policy_model = policy_model
+        self.step = policy_model.step
+        self.value = policy_model.estimate_v
         self.initial_state = None
         self.def_path_pre = os.path.dirname(os.path.abspath(__file__)) + '/ppo_tmp/'
 
@@ -217,7 +211,7 @@ class Model(object):
         advs = (advs - advs.mean()) / (advs.std() + 1e-8)
 
         td_map = {
-            self.train_pmodel.X: obs,
+            self.policy_model.X: obs,
             self.A: actions,
             self.ADV: advs,
             self.R: returns,

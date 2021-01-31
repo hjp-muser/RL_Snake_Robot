@@ -7,7 +7,7 @@ from baselines.common.tf_util import adjust_shape
 from baselines.common.mpi_running_mean_std import RunningMeanStd
 from baselines.common.models import get_network_builder
 
-import gym
+# import gym
 
 
 class PolicyModel(object):
@@ -96,6 +96,12 @@ class PolicyModel(object):
         a, neglogp, v = self._evaluate([self.action, self.neglogp, self.vf], observation, **extra_feed)
         return a, neglogp, v
 
+    def cal_action_neglogp(self, action):
+        return self.pd.neglogp(action)
+
+    def cal_entropy(self):
+        return self.pd.entropy()
+
     def estimate_q(self, observation, **extra_feed):
         qf_value = self._evaluate(self.qf, observation, **extra_feed)
         return qf_value
@@ -111,7 +117,7 @@ class PolicyModel(object):
         tf_util.load_state(load_path, sess=self.sess)
 
 
-def build_policy(env, policy_network, estimate_q=True, q_network=None, normalize_observations=False, **network_kwargs):
+def build_policy(env, policy_network, estimate_q=True, q_network=None, **network_kwargs):
     if isinstance(policy_network, str):
         policy_network = get_network_builder(policy_network)(**network_kwargs)
     else:
@@ -127,10 +133,10 @@ def build_policy(env, policy_network, estimate_q=True, q_network=None, normalize
             assert callable(q_network)
             q_network = q_network
 
-    def policy_fn(nbatch=None, sess=None, vf_latent=None, observ_placeholder=None):
+    def policy_fn(obs_ph=None, normalize_observations=False, vf_latent=None, sess=None):
         # preprocess input
         ob_space = env.observation_space
-        X = observ_placeholder if observ_placeholder is not None else observation_placeholder(ob_space, batch_size=nbatch)
+        X = obs_ph if obs_ph is not None else observation_placeholder(ob_space)
         extra_tensors = {}
         if normalize_observations and X.dtype == tf.float32:
             encoded_x, rms = _normalize_clip_observation(X)

@@ -2,22 +2,8 @@ import os
 import time
 from collections import deque
 import pickle
-
-from algorithm.RL_algorithm.ddpg.policy import Actor, Critic
-from baselines.ddpg.memory import Memory
-from baselines.ddpg.noise import AdaptiveParamNoiseSpec, NormalActionNoise, OrnsteinUhlenbeckActionNoise
-from baselines.common import set_global_seeds
-
-from algorithm.RL_algorithm.utils.tensorflow1.tf_utils import save_variables, load_variables
-
-try:
-    from mpi4py import MPI
-except ImportError:
-    MPI = None
-
 from copy import copy
 from functools import reduce
-
 import numpy as np
 import tensorflow as tf
 import tensorflow.contrib as tc
@@ -25,7 +11,13 @@ import tensorflow.contrib as tc
 from baselines import logger
 from baselines.common.mpi_adam import MpiAdam
 import baselines.common.tf_util as U
-from baselines.common.mpi_running_mean_std import RunningMeanStd
+from baselines.ddpg.memory import Memory
+from baselines.ddpg.noise import AdaptiveParamNoiseSpec, NormalActionNoise, OrnsteinUhlenbeckActionNoise
+from baselines.common import set_global_seeds
+
+from algorithm.RL_algorithm.soppo.values import build_value
+from algorithm.RL_algorithm.soppo.policies import build_policy
+from algorithm.RL_algorithm.utils.tensorflow1.tf_utils import save_variables, load_variables, get_session
 
 try:
     from mpi4py import MPI
@@ -33,16 +25,16 @@ except ImportError:
     MPI = None
 
 
-def normalize(x, stats):
-    if stats is None:
-        return x
-    return (x - stats.mean) / (stats.std + 1e-8)
+# def normalize(x, stats):
+#     if stats is None:
+#         return x
+#     return (x - stats.mean) / (stats.std + 1e-8)
 
 
-def denormalize(x, stats):
-    if stats is None:
-        return x
-    return x * stats.std + stats.mean
+# def denormalize(x, stats):
+#     if stats is None:
+#         return x
+#     return x * stats.std + stats.mean
 
 
 def reduce_std(x, axis=None, keepdims=False):
@@ -87,23 +79,24 @@ def get_perturbed_actor_updates(actor, perturbed_actor, param_noise_stddev):
 
 
 class Model(object):
-    def __init__(self, network, env, gamma=1, tau=0.01, total_timesteps=1e6,
-                 normalize_observations=True, normalize_returns=False, enable_popart=False,
+    def __init__(self, network, env, obs_ph=None, gamma=1, tau=0.01, total_timesteps=1e6,
+                 enable_popart=False,
                  noise_type='adaptive-param_0.2', clip_norm=None, reward_scale=1.,
                  batch_size=128, l2_reg_coef=0.2, actor_lr=1e-4, critic_lr=1e-3,
                  observation_range=(-5., 5.), action_range=(-1., 1.), return_range=(-np.inf, np.inf),
                  **network_kwargs):
         # logger.info('Using agent with the following configuration:')
         # logger.info(str(self.__dict__.items()))
-        observation_shape = env.observation_space.shape
-        action_shape = env.action_space.shape
+        self.observation_shape = observation_shape = env.observation_space.shape
+        self.action_shape = action_shape = env.action_space.shape
+        self.sess = sess = get_session()
+        assert (np.abs(env.action_space.low) == env.action_space.high).all()  # we assume symmetric actions.
 
         # Inputs.
-        self.obs0 = tf.placeholder(tf.float32, shape=(None,) + observation_shape, name='obs0')
-        self.obs1 = tf.placeholder(tf.float32, shape=(None,) + observation_shape, name='obs1')
+        self.obs_ph = obs_ph
+        self.action_ph = tf.placeholder(tf.float32, shape=(None,) + action_shape, name='actions')
         self.terminals1 = tf.placeholder(tf.float32, shape=(None, 1), name='terminals1')
         self.rewards = tf.placeholder(tf.float32, shape=(None, 1), name='rewards')
-        self.actions = tf.placeholder(tf.float32, shape=(None,) + action_shape, name='actions')
         self.critic_target = tf.placeholder(tf.float32, shape=(None, 1), name='critic_target')
         self.param_noise_stddev = tf.placeholder(tf.float32, shape=(), name='param_noise_stddev')
 
@@ -112,8 +105,6 @@ class Model(object):
         self.gamma = gamma
         self.tau = tau
         self.total_timesteps = total_timesteps
-        self.normalize_observations = normalize_observations
-        self.normalize_returns = normalize_returns
         self.enable_popart = enable_popart
         self.clip_norm = clip_norm
         self.reward_scale = reward_scale
@@ -124,12 +115,55 @@ class Model(object):
         self.actor_lr = actor_lr
         self.critic_lr = critic_lr
         self.l2_reg_coef = l2_reg_coef
-
         self.stats_sample = None
+        self.initial_state = None  # recurrent architectures not supported yet
+        self.def_path_pre = os.path.dirname(os.path.abspath(__file__)) + '/tmp/'
 
-        self.action_noise = None
-        self.param_noise = None
-        nb_actions = self.env.action_space.shape[-1]
+        self.memory = Memory(limit=int(1e6), action_shape=env.action_space.shape,
+                             observation_shape=env.observation_space.shape)
+
+        # set action_noise and param_noise
+        self.action_noise, self.param_noise = self.init_noise(noise_type)
+
+        with tf.variable_scope('ddpg_model', reuse=tf.AUTO_REUSE):
+            # create vf model
+            # default: mlp value network
+            value_network = build_value(env, network, **network_kwargs)
+            vf_model = value_network(obs_ph=self.obs_ph, sess=self.sess)
+            # create policy model
+            # default: mlp policy network
+            policy_network = build_policy(env, network, estimate_q=True, **network_kwargs)
+            policy_model = policy_network(obs_ph=self.obs_ph, sess=self.sess, vf_latent=vf_model.vf_latent)
+
+        # Create target networks
+        with tf.variable_scope('ddpg_target_model', reuse=tf.AUTO_REUSE):
+            # create vf model
+            # default: mlp value network
+            target_value_network = build_value(env, network, **network_kwargs)
+            target_vf_model = target_value_network(obs_ph=self.obs_ph, sess=self.sess)
+            # create policy model
+            # default: mlp policy network
+            target_policy_network = build_policy(env, network, estimate_q=True, **network_kwargs)
+            target_policy_model = target_policy_network(obs_ph=self.obs_ph, sess=self.sess, vf_latent=target_vf_model.vf_latent)
+
+        # Create networks and core TF parts that are shared across setup parts.
+        self.actor_tf = policy_model.action
+        self.critic_tf = self.critic(normalized_obs0, self.action_ph)
+        self.critic_with_actor_tf = policy_model.qf
+        Q_obs1 = target_policy_model.qf
+        self.target_Q = critic_target = self.rewards + (1. - self.terminals1) * gamma * Q_obs1
+
+        # Set up parts
+        if self.param_noise is not None:
+            self.setup_param_noise(self.obs_ph)
+        self.setup_actor_optimizer()
+        self.setup_critic_optimizer()
+        self.setup_stats()
+        self.setup_target_network_updates()
+
+    def init_noise(self, noise_type):
+        action_noise = None
+        param_noise = None
         if noise_type is not None:
             for current_noise_type in noise_type.split(','):
                 current_noise_type = current_noise_type.strip()
@@ -137,74 +171,18 @@ class Model(object):
                     pass
                 elif 'adaptive-param' in current_noise_type:
                     _, stddev = current_noise_type.split('_')
-                    self.param_noise = AdaptiveParamNoiseSpec(initial_stddev=float(stddev),
+                    param_noise = AdaptiveParamNoiseSpec(initial_stddev=float(stddev),
                                                          desired_action_stddev=float(stddev))
                 elif 'normal' in current_noise_type:
                     _, stddev = current_noise_type.split('_')
-                    self.action_noise = NormalActionNoise(mu=np.zeros(nb_actions), sigma=float(stddev) * np.ones(nb_actions))
+                    action_noise = NormalActionNoise(mu=np.zeros(self.action_shape[-1]), sigma=float(stddev) * np.ones(self.action_shape[-1]))
                 elif 'ou' in current_noise_type:
                     _, stddev = current_noise_type.split('_')
-                    self.action_noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(nb_actions),
-                                                                sigma=float(stddev) * np.ones(nb_actions))
+                    action_noise = OrnsteinUhlenbeckActionNoise(mu=np.zeros(self.action_shape[-1]),
+                                                                sigma=float(stddev) * np.ones(self.action_shape[-1]))
                 else:
                     raise RuntimeError('unknown noise type "{}"'.format(current_noise_type))
-
-        assert (np.abs(env.action_space.low) == env.action_space.high).all()  # we assume symmetric actions.
-        self.memory = Memory(limit=int(1e6), action_shape=env.action_space.shape,
-                             observation_shape=env.observation_space.shape)
-        self.critic = Critic(network=network, **network_kwargs)
-        self.actor = Actor(nb_actions, network=network, **network_kwargs)
-
-        # Observation normalization.
-        if self.normalize_observations:
-            with tf.variable_scope('obs_rms'):
-                self.obs_rms = RunningMeanStd(shape=observation_shape)
-        else:
-            self.obs_rms = None
-        normalized_obs0 = tf.clip_by_value(normalize(self.obs0, self.obs_rms),
-                                           self.observation_range[0], self.observation_range[1])
-        normalized_obs1 = tf.clip_by_value(normalize(self.obs1, self.obs_rms),
-                                           self.observation_range[0], self.observation_range[1])
-
-        # Return normalization.
-        if self.normalize_returns:
-            with tf.variable_scope('ret_rms'):
-                self.ret_rms = RunningMeanStd()
-        else:
-            self.ret_rms = None
-
-        # Create target networks.
-        target_actor = copy(self.actor)
-        target_actor.name = 'target_actor'
-        self.target_actor = target_actor
-        target_critic = copy(self.critic)
-        target_critic.name = 'target_critic'
-        self.target_critic = target_critic
-
-        # Create networks and core TF parts that are shared across setup parts.
-        self.actor_tf = self.actor(normalized_obs0)
-        self.normalized_critic_tf = self.critic(normalized_obs0, self.actions)
-        self.critic_tf = denormalize(
-            tf.clip_by_value(self.normalized_critic_tf, self.return_range[0], self.return_range[1]), self.ret_rms)
-        self.normalized_critic_with_actor_tf = self.critic(normalized_obs0, self.actor_tf, reuse=True)
-        self.critic_with_actor_tf = denormalize(
-            tf.clip_by_value(self.normalized_critic_with_actor_tf, self.return_range[0], self.return_range[1]),
-            self.ret_rms)
-        Q_obs1 = denormalize(target_critic(normalized_obs1, target_actor(normalized_obs1)), self.ret_rms)
-        self.target_Q = self.rewards + (1. - self.terminals1) * gamma * Q_obs1
-
-        # Set up parts.
-        if self.param_noise is not None:
-            self.setup_param_noise(normalized_obs0)
-        self.setup_actor_optimizer()
-        self.setup_critic_optimizer()
-        if self.normalize_returns and self.enable_popart:
-            self.setup_popart()
-        self.setup_stats()
-        self.setup_target_network_updates()
-
-        self.initial_state = None  # recurrent architectures not supported yet
-        self.def_path_pre = os.path.dirname(os.path.abspath(__file__)) + '/tmp/'
+        return action_noise, param_noise
 
     def setup_target_network_updates(self):
         actor_init_updates, actor_soft_updates = get_target_updates(self.actor.vars, self.target_actor.vars, self.tau)
@@ -244,9 +222,7 @@ class Model(object):
 
     def setup_critic_optimizer(self):
         logger.info('setting up critic optimizer')
-        normalized_critic_target_tf = tf.clip_by_value(normalize(self.critic_target, self.ret_rms),
-                                                       self.return_range[0], self.return_range[1])
-        self.critic_loss = tf.reduce_mean(tf.square(self.normalized_critic_tf - normalized_critic_target_tf))
+        self.critic_loss = tf.reduce_mean(tf.square(self.normalized_critic_tf - self.critic_target))
         if self.l2_reg_coef > 0.:
             critic_reg_vars = [var for var in self.critic.trainable_vars if
                                var.name.endswith('/w:0') and 'output' not in var.name]
@@ -377,16 +353,6 @@ class Model(object):
                 self.old_std: np.array([old_std]),
                 self.old_mean: np.array([old_mean]),
             })
-
-            # Run sanity check. Disabled by default since it slows down things considerably.
-            # print('running sanity check')
-            # target_Q_new, new_mean, new_std = self.sess.run([self.target_Q, self.ret_rms.mean, self.ret_rms.std], feed_dict={
-            #     self.obs1: batch['obs1'],
-            #     self.rewards: batch['rewards'],
-            #     self.terminals1: batch['terminals1'].astype('float32'),
-            # })
-            # print(target_Q_new, target_Q, new_mean, new_std)
-            # assert (np.abs(target_Q - target_Q_new) < 1e-3).all()
         else:
             target_Q = self.sess.run(self.target_Q, feed_dict={
                 self.obs1: batch['obs1'],
@@ -398,7 +364,7 @@ class Model(object):
         ops = [self.actor_grads, self.actor_loss, self.critic_grads, self.critic_loss]
         actor_grads, actor_loss, critic_grads, critic_loss = self.sess.run(ops, feed_dict={
             self.obs0: batch['obs0'],
-            self.actions: batch['actions'],
+            self.action_ph: batch['actions'],
             self.critic_target: target_Q,
         })
         self.actor_optimizer.update(actor_grads, stepsize=self.actor_lr)
@@ -423,7 +389,7 @@ class Model(object):
             self.stats_sample = self.memory.sample(batch_size=self.batch_size)
         values = self.sess.run(self.stats_ops, feed_dict={
             self.obs0: self.stats_sample['obs0'],
-            self.actions: self.stats_sample['actions'],
+            self.action_ph: self.stats_sample['actions'],
         })
 
         names = self.stats_names[:]
@@ -471,13 +437,11 @@ class Model(object):
                 self.param_noise_stddev: self.param_noise.current_stddev,
             })
 
-    def learn(self,
-              total_timesteps=None,
+    def learn(self, total_timesteps=None,
               seed=None,
               nb_epochs=None,  # with default settings, perform 1M steps total
               nb_epoch_cycles=20,
               nb_rollout_steps=100,
-              render=False,
               nb_train_steps=50,  # per epoch cycle and MPI worker,
               batch_size=64,  # per MPI worker
               param_noise_adaption_interval=50,):
@@ -531,18 +495,12 @@ class Model(object):
                     # Predict next action.
                     action, q, _, _ = self.train_step(obs, apply_noise=True, compute_Q=True)
 
-                    # Execute next action.
-                    if rank == 0 and render:
-                        self.env.render()
-
                     # max_action is of dimension A, whereas action is dimension (nenvs, A) - the multiplication gets broadcasted to the batch
                     # new_obs, r, done, info = self.env.step(max_action * action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
                     new_obs, r, done, info = self.env.step(action)
                     # note these outputs are batched from vecenv
 
                     t += 1
-                    if rank == 0 and render:
-                        self.env.render()
                     episode_reward += r
                     episode_step += 1
 
@@ -581,30 +539,6 @@ class Model(object):
                     epoch_critic_losses.append(cl)
                     epoch_actor_losses.append(al)
                     self.update_target_net()
-            #
-            # # Evaluate.
-            # eval_episode_rewards = []
-            # eval_qs = []
-            # if eval_env is not None:
-            #     eval_obs = eval_env.reset()
-            #     nenvs_eval = eval_obs.shape[0]
-            #     eval_episode_reward = np.zeros(nenvs_eval, dtype=np.float32)
-            #     for t_rollout in range(nb_eval_steps):
-            #         eval_action, eval_q, _, _ = self.train_step(eval_obs, apply_noise=False, compute_Q=True)
-            #         # eval_obs, eval_r, eval_done, eval_info = eval_env.step(
-            #         #     max_action * eval_action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
-            #         eval_obs, eval_r, eval_done, eval_info = eval_env.step(eval_action)  # scale for execution in env (as far as DDPG is concerned, every action is in [-1, 1])
-            #
-            #         if render_eval:
-            #             eval_env.render()
-            #         eval_episode_reward += eval_r
-            #
-            #         eval_qs.append(eval_q)
-            #         for d in range(len(eval_done)):
-            #             if eval_done[d]:
-            #                 eval_episode_rewards.append(eval_episode_reward[d])
-            #                 eval_episode_rewards_history.append(eval_episode_reward[d])
-            #                 eval_episode_reward[d] = 0.0
 
             if MPI is not None:
                 mpi_size = MPI.COMM_WORLD.Get_size()

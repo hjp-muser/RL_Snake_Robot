@@ -145,6 +145,6 @@ rlbench/task_ttms/reach_target(复件).ttm
 
 *.txt
 
-algorithm/RL_algorithm/ppo/best_performance/
+algorithm/RL_algorithm/*/best_performance/
 algorithm/RL_algorithm/soppo/ppo_tmp/
 

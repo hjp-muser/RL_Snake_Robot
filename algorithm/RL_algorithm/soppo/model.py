@@ -3,6 +3,7 @@ import numpy as np
 from collections import deque
 from baselines import logger
 from baselines.common import explained_variance, set_global_seeds
+from baselines.common.input import observation_placeholder
 
 try:
     from baselines.common.mpi_adam_optimizer import MpiAdamOptimizer
@@ -25,13 +26,14 @@ class Model(object):
                  comm=None, **network_kwargs):
 
         self.env = env
+        self.obs_ph = observation_placeholder(env.observation_space)
         self.nsteps = nsteps
         self.nminibatches = nminibatches
         self.nenvs = self.env.num_envs
         self.nsteps = nsteps
         self.nbatch = self.nenvs * self.nsteps
         self.nbatch_train = self.nbatch // nminibatches
-        self.ppo_model = PPO(network=network, env=env, lr=ppo_lr, cliprange=cliprange,
+        self.ppo_model = PPO(network=network, env=env, obs_ph=self.obs_ph, lr=ppo_lr, cliprange=cliprange,
                              nsteps=nsteps, nminibatches=nminibatches,
                              ent_coef=ent_coef, vf_coef=vf_coef, max_grad_norm=max_grad_norm, gamma=gamma, lam=lam, mpi_rank_weight=mpi_rank_weight,
                              comm=comm, load_path=None, **network_kwargs)
@@ -132,3 +134,13 @@ class Model(object):
                 self.ppo_model.save(model_save_path)
 
         return self
+
+    def load_newest(self, load_path=None):
+        self.ppo_model.load_newest(load_path)
+
+    def load_index(self, index, load_path=None):
+        self.ppo_model.load_index(index, load_path)
+
+    def step(self, obs):
+        a, neglogp, v = self.ppo_model.step(obs)
+        return a, neglogp, v, None
