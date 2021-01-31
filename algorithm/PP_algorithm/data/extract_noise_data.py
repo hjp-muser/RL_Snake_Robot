@@ -19,7 +19,7 @@ def search_data_file(dirpath, filename_prefix, start=0):
 
 
 if __name__ == "__main__":
-    dirpath = "/home/huangjp/CoppeliaSim_Edu_V4_0_0_Ubuntu18_04/programming/RL_Snake_Robot/algorithm/RL_algorithm/obs_record"
+    dirpath = "/home/lydon/CoppeliaSim_Edu_V4_1_0_Ubuntu16_04/programming/RL_Snake_Robot/algorithm/RL_algorithm/obs_record"
     yndatafile_name = "ynoise_data.txt"
     yndatafile = open(yndatafile_name, 'a+')
     yndatafile.seek(0)
