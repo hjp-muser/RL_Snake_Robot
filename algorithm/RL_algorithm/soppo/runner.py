@@ -1,5 +1,21 @@
 import numpy as np
-from baselines.common.runners import AbstractEnvRunner
+from abc import ABC, abstractmethod
+
+
+class AbstractEnvRunner(ABC):
+    def __init__(self, *, env, models, nsteps):
+        self.env = env
+        self.models = models
+        self.nenv = nenv = env.num_envs if hasattr(env, 'num_envs') else 1
+        self.batch_ob_shape = (nenv*nsteps,) + env.observation_space.shape
+        self.obs = np.zeros((nenv,) + env.observation_space.shape, dtype=env.observation_space.dtype.name)
+        self.obs[:] = env.reset()
+        self.nsteps = nsteps
+        self.dones = [False for _ in range(nenv)]
+
+    @abstractmethod
+    def run(self):
+        raise NotImplementedError
 
 
 class Runner(AbstractEnvRunner):
@@ -12,8 +28,8 @@ class Runner(AbstractEnvRunner):
     - Make a mini batch
     """
 
-    def __init__(self, *, env, model, nsteps, gamma, lam):
-        super().__init__(env=env, model=model, nsteps=nsteps)
+    def __init__(self, *, env, models, nsteps, gamma, lam):
+        super().__init__(env=env, models=models, nsteps=nsteps)
         # Lambda used in GAE (General Advantage Estimation)
         self.lam = lam
         # Discount rate
@@ -25,15 +41,21 @@ class Runner(AbstractEnvRunner):
         epinfos = []
         # For n in range number of steps
         for _ in range(self.nsteps):
-            # Given observations, get action value and neglopacs
+            # Given observations, get action
             # We already have self.obs because Runner superclass run self.obs[:] = env.reset() on init
-            actions, neglogpacs, values = self.model.step(self.obs)
+            if isinstance(self.models, list) is False:
+                actions = self.models.step(self.obs)
+            else:
+                assert len(self.models) == self.nenv
+                actions = []
+                obs_group = np.array_split(self.obs, self.nenv)
+                for i in range(self.nenv):
+                    action = self.models[i].step(obs_group[i])
+                    actions.append(action.squeeze(0))
+                actions = np.array(actions)
             mb_obs.append(self.obs.copy())
             mb_actions.append(actions)
-            mb_values.append(values)
-            mb_neglogpacs.append(neglogpacs)
             mb_dones.append(self.dones)
-
             # Take actions in env and look the results
             # Infos contains a ton of useful informations
             self.obs[:], rewards, self.dones, infos = self.env.step(actions)
@@ -44,35 +66,7 @@ class Runner(AbstractEnvRunner):
                     epinfos.append(maybeepinfo)
 
         # batch of steps to batch of rollouts
-        mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
-        mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
-        mb_actions = np.asarray(mb_actions)
-        mb_values = np.asarray(mb_values, dtype=np.float32)
-        mb_neglogpacs = np.asarray(mb_neglogpacs, dtype=np.float32)
-        mb_dones = np.asarray(mb_dones, dtype=np.bool)
-        last_values = self.model.value(self.obs)
-
-        # discount/bootstrap off value fn
-        mb_advs = np.zeros_like(mb_rewards)
-        lastgaelam = 0
-        for t in reversed(range(self.nsteps)):
-            if t == self.nsteps - 1:
-                nextnonterminal = 1.0 - self.dones
-                nextvalues = last_values
-            else:
-                nextnonterminal = 1.0 - mb_dones[t + 1]
-                nextvalues = mb_values[t + 1]
-            # GAE (General Advantage Estimation)
-            delta = mb_rewards[t] + self.gamma * nextvalues * nextnonterminal - mb_values[t]
-            mb_advs[t] = lastgaelam = delta + self.gamma * self.lam * nextnonterminal * lastgaelam
-        mb_returns = mb_advs + mb_values
-        return (*map(sf01, (mb_obs, mb_returns, mb_actions, mb_values, mb_neglogpacs)), epinfos)
-
-
-# obs, returns, actions, values, neglogpacs, infos = runner.run()
-def sf01(arr):
-    """
-    swap and then flatten axes 0 and 1
-    """
-    s = arr.shape
-    return arr.swapaxes(0, 1).reshape(s[0] * s[1], *s[2:])
+        mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype).swapaxes(0, 1)
+        mb_actions = np.asarray(mb_actions).swapaxes(0, 1)
+        mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(0, 1)
+        return mb_obs, mb_actions, mb_rewards, epinfos

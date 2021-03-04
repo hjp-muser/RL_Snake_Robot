@@ -5,6 +5,9 @@ from baselines import logger
 from baselines.common import explained_variance, set_global_seeds
 from baselines.common.input import observation_placeholder
 
+from algorithm.RL_algorithm.soppo.memory import Memory
+from algorithm.RL_algorithm.soppo.runner import Runner
+
 try:
     from baselines.common.mpi_adam_optimizer import MpiAdamOptimizer
     from mpi4py import MPI
@@ -15,6 +18,7 @@ except ImportError:
 from algorithm.RL_algorithm.utils.common_utils import set_global_seeds
 from algorithm.RL_algorithm.utils.math_utils import safe_mean
 from algorithm.RL_algorithm.soppo.ppo import Model as PPO
+from algorithm.RL_algorithm.soppo.ddpg import Model as DDPG
 
 
 class Model(object):
@@ -23,20 +27,28 @@ class Model(object):
     """
     def __init__(self, *, network, env, ppo_lr=3e-4, cliprange=0.2, nsteps=128, nminibatches=4,
                  ent_coef=0.0, vf_coef=0.25, max_grad_norm=0.5, gamma=0.99, lam=0.95, mpi_rank_weight=1,
-                 comm=None, **network_kwargs):
+                 comm=None, tau=0.01, normalize_observations=False, ddpg_noise_type=None,
+                 ddpg_batch_size=32, actor_reg_coef=0.1, critic_reg_coef=0.2, ddpg_actor_lr=3e-5, ddpg_critic_lr=1e-5, **network_kwargs):
 
         self.env = env
-        self.obs_ph = observation_placeholder(env.observation_space)
         self.nsteps = nsteps
         self.nminibatches = nminibatches
         self.nenvs = self.env.num_envs
         self.nsteps = nsteps
         self.nbatch = self.nenvs * self.nsteps
         self.nbatch_train = self.nbatch // nminibatches
-        self.ppo_model = PPO(network=network, env=env, obs_ph=self.obs_ph, lr=ppo_lr, cliprange=cliprange,
-                             nsteps=nsteps, nminibatches=nminibatches,
-                             ent_coef=ent_coef, vf_coef=vf_coef, max_grad_norm=max_grad_norm, gamma=gamma, lam=lam, mpi_rank_weight=mpi_rank_weight,
-                             comm=comm, load_path=None, **network_kwargs)
+        self.ppo_model = PPO(network=network, obs_space=env.observation_space, ac_space=env.action_space, lr=ppo_lr, cliprange=cliprange,
+                             nsteps=nsteps, nminibatches=nminibatches, ent_coef=ent_coef, vf_coef=vf_coef, max_grad_norm=max_grad_norm,
+                             mpi_rank_weight=mpi_rank_weight, comm=comm, **network_kwargs)
+        # self.ppo_model.load_index(0)
+        self.ddpg_model = DDPG(network=network, obs_space=env.observation_space, ac_space=env.action_space, tau=tau, max_grad_norm=max_grad_norm,
+                               normalize_observations=normalize_observations, noise_type=ddpg_noise_type,
+                               batch_size=ddpg_batch_size, actor_reg_coef=actor_reg_coef, critic_reg_coef=critic_reg_coef,
+                               actor_lr=ddpg_actor_lr, critic_lr=ddpg_critic_lr, **network_kwargs)
+
+        self.runner = Runner(env=self.env, models=[self.ppo_model, self.ddpg_model], nsteps=nsteps, gamma=gamma, lam=lam)
+        obs, actions, rewards, epinfos = self.runner.run()
+        self.memory = Memory(limit=int(1e6), action_shape=env.action_space.shape, observation_shape=env.observation_space.shape)
 
     def learn(self, total_timesteps, noptepochs=4, seed=None, log_interval=10, save_interval=10):
 
@@ -46,7 +58,7 @@ class Model(object):
         # Calculate the batch_size
         is_mpi_root = (MPI is None or MPI.COMM_WORLD.Get_rank() == 0)
 
-        epinfobuf = deque(maxlen=100)
+        episode_info_buffer = deque(maxlen=100)
 
         # Start total timer
         tfirststart = time.perf_counter()
@@ -70,7 +82,7 @@ class Model(object):
             if update % log_interval == 0 and is_mpi_root:
                 logger.info('Done.')
 
-            epinfobuf.extend(epinfos)
+            episode_info_buffer.extend(epinfos)
 
             # Here what we're going to do is for each minibatch calculate the loss and append it.
             mblossvals = []
@@ -115,8 +127,8 @@ class Model(object):
                 # or if it's just worse than predicting nothing (ev =< 0)
                 ev = explained_variance(values, returns)
                 logger.record_tabular("fps", fps)
-                logger.record_tabular('eprewmean', safe_mean([epinfo['r'] for epinfo in epinfobuf]))
-                logger.record_tabular('eplenmean', safe_mean([epinfo['l'] for epinfo in epinfobuf]))
+                logger.record_tabular('eprewmean', safe_mean([epinfo['r'] for epinfo in episode_info_buffer]))
+                logger.record_tabular('eplenmean', safe_mean([epinfo['l'] for epinfo in episode_info_buffer]))
                 logger.record_tabular("misc/serial_timesteps", update * self.nsteps)
                 logger.record_tabular("misc/nupdates", update)
                 logger.record_tabular("misc/total_timesteps", update * self.nbatch)

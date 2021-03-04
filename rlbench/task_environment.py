@@ -115,7 +115,15 @@ class TaskEnvironment(object):
 
         # robot_action = np.array(action[:-1]) # action should contain 1 extra value for camera open close state
         # auxiliary_action = action[-1]
-        robot_action = np.array(action)
+        if self._action_config.is_discrete is False:
+            robot_action = np.array(action)
+        else:
+            # discrete to continuous
+            d2c_alpha_h = {0: 0.3, 1: 0.4, 2: 0.5, 3: 0.6}
+            d2c_alpha_v = {0: 0.0, 1: 0.1, 2: 0.2, 3: 0.3}
+            d2c_theta_h = {0: 2.0, 1: 3.0, 2: 4.0, 3: 5.0}
+            robot_action = [d2c_alpha_h[action[0]], d2c_alpha_v[action[1]], d2c_theta_h[action[2]]]
+            robot_action = np.array(robot_action)
 
         if self._action_config.robot_action_config == SnakeRobotActionConfig.ABS_JOINT_VELOCITY:
 

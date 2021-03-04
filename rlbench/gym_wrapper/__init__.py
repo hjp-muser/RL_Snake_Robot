@@ -54,6 +54,17 @@ for task_file in TASKS:
             'multi_action_space': True
         }
     )
+    # multi_discrete_action_space
+    register(
+        id='%s-state-param-v2' % task_name,
+        entry_point='rlbench.gym_wrapper:RLBenchEnv',
+        kwargs={
+            'task_class': task_class,
+            'action_mode': 'trigon',
+            'observation_mode': 'state',
+            'discrete_action_space': True
+        }
+    )
     # HER
     register(
         id='%s-state-goal-param-v0' % task_name,

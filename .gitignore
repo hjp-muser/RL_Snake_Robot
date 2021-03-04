@@ -151,4 +151,5 @@ rlbench/task_ttms/reach_target (copy).ttm
 algorithm/PP_algorithm/data/extract_noise_data.py
 algorithm/RL_algorithm/*/best_performance/
 algorithm/RL_algorithm/soppo/ppo_tmp/
+algorithm/RL_algorithm/soppo/reback/
 

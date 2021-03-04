@@ -150,7 +150,7 @@ def main(args):
             if state is not None:
                 actions, _, state, _ = model.step(obs, state=state, mask=dones)
             else:
-                actions, _, _, _ = model.step(obs)
+                actions = model.step(obs)
             # print("actions = ", actions)
             obs, rew, done, _ = env.step(actions)
             episode_rew += rew
@@ -205,7 +205,12 @@ if __name__ == '__main__':
     ###########################################################################################################
     her_args = ['--env=reach_target-state-goal-param-v0', '--alg=her', '--total_timesteps=1e6']
 
+    ###########################################################################################################
     soppo_args = ['--env=reach_target-state-param-v0', '--alg=soppo', '--total_timesteps=1e6']
     soppo_play = ['--env=reach_target-state-param-v0', '--alg=soppo', '--total_timesteps=0', '--play']
 
-    main(soppo_play)
+    ###########################################################################################################
+    dsoppo_args = ['--env=reach_target-state-param-v2', '--num_env=2', '--alg=soppo', '--total_timesteps=1e6']
+    dsoppo_play = ['--env=reach_target-state-param-v2', '--num_env=2', '--alg=soppo', '--total_timesteps=0', '--play']
+
+    main(dsoppo_play)

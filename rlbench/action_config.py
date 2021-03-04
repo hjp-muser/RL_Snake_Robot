@@ -1,7 +1,8 @@
 from enum import Enum
 
 SNAKE_ROBOT_JOINTS = 16
-TRIGON_MODEL_PARAMS = 4
+TRIGON_MODEL_PARAMS = 3
+
 
 class SnakeRobotActionConfig(Enum):
 
@@ -95,10 +96,12 @@ class ActionConfig(object):
 
     def __init__(self,
                  robot_action_config: SnakeRobotActionConfig = SnakeRobotActionConfig.ABS_JOINT_VELOCITY,
-                 aux_equip_action_config: CameraActionConfig = CameraActionConfig.OPEN_AMOUNT):
+                 aux_equip_action_config: CameraActionConfig = CameraActionConfig.OPEN_AMOUNT,
+                 is_discrete=False):
         if not (isinstance(robot_action_config, SnakeRobotActionConfig) and
                 isinstance(aux_equip_action_config, CameraActionConfig)):
             raise NotImplementedError("Not implement for the other action configuration except snake robot action configuration.")
         self.robot_action_config = robot_action_config
         self.aux_equip_action_config = aux_equip_action_config
         self.action_size = self.robot_action_config.action_size
+        self.is_discrete = is_discrete

@@ -28,9 +28,16 @@ class Rattler(SnakeRobot):
     #     print('beta = ', beta)
         num_joints = self.get_joint_count()
         joints = np.zeros((num_joints,))
-        alpha_h = 0.15 * alpha_h + 0.55
-        alpha_v = 0.2 * alpha_v + 0.2
-        theta_h = 2 * theta_h + 4
+        # continuous action space
+        # alpha_h = 0.15 * alpha_h + 0.55
+        # alpha_v = 0.2 * alpha_v + 0.2
+        # theta_h = 2 * theta_h + 4
+
+        # discrete action space
+        alpha_h = alpha_h
+        alpha_v = alpha_v
+        theta_h = theta_h
+
         # print("------------------------------------------------")
         # print('sign = ', sign)
         # print('alpha_h = ', alpha_h)

@@ -15,7 +15,8 @@ class RLBenchEnv(gym.Env):
 
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, task_class, observation_mode='state', action_mode='joint', multi_action_space=False):
+    def __init__(self, task_class, observation_mode='state', action_mode='joint',
+                 multi_action_space=False, discrete_action_space=False):
         self.num_skip_control = 20
         self.epi_obs = []
         self.obs_record = True
@@ -43,7 +44,7 @@ class RLBenchEnv(gym.Env):
         if action_mode == 'joint':
             self.ac_config = ActionConfig(SnakeRobotActionConfig.ABS_JOINT_POSITION)
         elif action_mode == 'trigon':
-            self.ac_config = ActionConfig(SnakeRobotActionConfig.TRIGON_MODEL_PARAM)
+            self.ac_config = ActionConfig(SnakeRobotActionConfig.TRIGON_MODEL_PARAM, is_discrete=discrete_action_space)
         else:
             raise ValueError('Unrecognised action_mode: %s.' % action_mode)
 
@@ -68,6 +69,8 @@ class RLBenchEnv(gym.Env):
                 high2 = np.array([3.0])
                 action_space2 = spaces.Box(low=low2, high=high2, dtype=np.float32)
                 self.action_space = spaces.Tuple((action_space1, action_space2))
+            elif discrete_action_space:
+                self.action_space = spaces.MultiDiscrete([4, 4, 4])
             else:
                 # low = np.array([0.0, -0.8, -0.8, 1.0, 3.0, -50, -10, -0.1, -0.1])
                 # high = np.array([1.0, 0.8, 0.8, 3.0, 5.0, 50, 10, 0.1, 0.1])

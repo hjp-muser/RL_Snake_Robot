@@ -59,12 +59,16 @@ class PolicyModel(object):
         if estimate_q:
             assert callable(q_network)
             self.q_network = q_network
-            with tf.variable_scope('qf', reuse=tf.AUTO_REUSE):
-                qf_input = tf.stop_gradient(tf.concat(self.policy_latent, self.vf_latent))
-                # qf_input = self.policy_latent * vf_latent
-                qf_latent = self.q_network(qf_input)
-                self.qf = fc(qf_latent, 'qf', 1)
-                self.qf = self.qf[:, 0]
+            self.qf = self._create_qf(self.policy_latent, self.vf_latent)
+
+    def _create_qf(self, policy_latent, vf_latent):
+        with tf.variable_scope('qf', reuse=tf.AUTO_REUSE):
+            qf_input = tf.concat([policy_latent, vf_latent], axis=1)
+            # qf_input = self.policy_latent * vf_latent
+            qf_latent = self.q_network(qf_input)
+            qf = fc(qf_latent, 'qf', 1)
+            qf = qf[:, 0]
+            return qf
 
     def _evaluate(self, variables, observation, **extra_feed):
         sess = self.sess
@@ -101,10 +105,6 @@ class PolicyModel(object):
 
     def cal_entropy(self):
         return self.pd.entropy()
-
-    def estimate_q(self, observation, **extra_feed):
-        qf_value = self._evaluate(self.qf, observation, **extra_feed)
-        return qf_value
 
     def estimate_v(self, observation, **extra_feed):
         vf_value = self._evaluate(self.vf, observation, **extra_feed)
