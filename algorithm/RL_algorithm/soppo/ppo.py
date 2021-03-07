@@ -12,7 +12,7 @@ from algorithm.RL_algorithm.soppo.utils import get_target_updates, constfn, get_
 
 class Model(object):
     def __init__(self, *, network, obs_space, ac_space, vf_model=None, target_vf_model=None, sess=None, cliprange=0.2,
-                 lr=3e-4, gamma=0.99, lam=0.95, tau=0.01, pg_coef=1.0, vf_coef=0.25, kl_coef=0.5, ent_coef=0.0,
+                 lr=3e-4, gamma=0.99, lam=0.95, tau=0.01, pg_coef=1.0, vf_coef=0.25, ref_coef=0.1, kl_coef=0.5, ent_coef=0.0,
                  actor_reg_coef=0.1, critic_reg_coef=0.1, max_grad_norm=0.5, **network_kwargs):
         """
         Parameters:
@@ -69,6 +69,7 @@ class Model(object):
         self.tau = tau
         self.pg_coef = pg_coef
         self.vf_coef = vf_coef
+        self.ref_coef = ref_coef
         self.kl_coef = kl_coef
         self.ent_coef = ent_coef
         self.actor_reg_coef = actor_reg_coef
@@ -135,6 +136,7 @@ class Model(object):
         self.action_ph = self.policy_model.pdtype.sample_placeholder([None])
         self.adv_ph = tf.placeholder(tf.float32, [None])
         self.return_ph = tf.placeholder(tf.float32, [None])
+        self.ref_ph = self.policy_model.pdtype.param_placeholder([None])
         self.lr_ph = tf.placeholder(tf.float32, [])
         self.cliprange_ph = tf.placeholder(tf.float32, [])
 
@@ -171,9 +173,11 @@ class Model(object):
         # Entropy is used to improve exploration by limiting the premature convergence to suboptimal policy.
         entropy = tf.reduce_mean(self.policy_model.cal_entropy())
 
+        ref_loss = tf.reduce_mean(tf.square(self.policy_model.pd_param - self.ref_ph))
+
         # clipfrac = tf.reduce_mean(tf.to_float(tf.greater(tf.abs(ratio - 1.0), self.cliprange_ph)))  # 裁剪数据占总数据比例
 
-        self.actor_loss = self.pg_coef * pg_loss + self.kl_coef * kl_loss - self.ent_coef * entropy
+        self.actor_loss = self.pg_coef * pg_loss + self.kl_coef * kl_loss - self.ent_coef * entropy + self.ref_coef * ref_loss
 
         if self.actor_reg_coef > 0.:
             actor_reg_vars = [var for var in self.actor_train_variables if
@@ -198,8 +202,8 @@ class Model(object):
             # Clip the gradients (normalize)
             grads, _grad_norm = tf.clip_by_global_norm(grads, self.max_grad_norm)
         self.actor_grads = grads
-        self.stats_list.extend([pg_loss, kl_loss, entropy, self.actor_loss])  # , self.actor_grads
-        self.stats_names.extend(['pg_loss', 'kl_loss', 'entropy', 'actor_loss'])  # , 'actor_grads'
+        self.stats_list.extend([pg_loss, kl_loss, entropy, ref_loss, self.actor_loss])  # , self.actor_grads
+        self.stats_names.extend(['pg_loss', 'kl_loss', 'entropy', 'ref_loss', 'actor_loss'])  # , 'actor_grads'
         grads_and_var = list(zip(grads, var))
         self.actor_optimizer = self.actor_trainer.apply_gradients(grads_and_var)
 
@@ -267,7 +271,7 @@ class Model(object):
         self.sess.run(tf.global_variables_initializer())
         self.sess.run(self.target_init_updates)
 
-    def train(self, progress_fraction, observations, actions, advantages, output_stats=True):
+    def train(self, progress_fraction, observations, actions, advantages, ref_pdparams, output_stats=True):
         returns = advantages + self.target_vf_model.step(observations)
         cur_lr = self.lr(progress_fraction)
         cur_cliprange = self.cliprange(progress_fraction)
@@ -281,6 +285,7 @@ class Model(object):
             self.action_ph: actions,
             self.adv_ph: advantages,
             self.return_ph: returns,
+            self.ref_ph: ref_pdparams,
             self.lr_ph: cur_lr,
             self.cliprange_ph: cur_cliprange,
         }
