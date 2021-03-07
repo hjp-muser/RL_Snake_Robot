@@ -1,6 +1,7 @@
 from typing import List
 import numpy as np
 from collections import deque
+import time
 
 from numpy.core._multiarray_umath import ndarray
 from pyrep import PyRep
@@ -66,7 +67,8 @@ class ReachTarget(Task):
         # set random position of the target
         # rand_x = np.random.rand()
         # rand_y = np.random.rand()
-
+        ltime = time.localtime()
+        np.random.seed(ltime.tm_hour*60+ltime.tm_min*60+int(ltime.tm_sec/10))
         rand_x = np.random.uniform(0.0, 1.0)
         arc_angle = 70
         radius = 1.6
@@ -81,7 +83,7 @@ class ReachTarget(Task):
         self.success_sensor.set_position([rand_x, rand_y, 0.04])
         # self.target.set_position([0.4, -1.0, 0.04])
         # self.success_sensor.set_position([0.4, -1.0, 0.04])
-
+        # print("(x,y) = ", (rand_x, rand_y))
         self._tar_pos = np.array(self.target.get_position())
         self._last_rob_pos_queue = deque(maxlen=50)
         self._last_rob_pos_queue.append(np.array(self.robot.robot_body.get_snake_head_pos()))
@@ -148,8 +150,8 @@ class ReachTarget(Task):
         w1 = 1 - dis_reward / (dis_reward + angle_reward + posture_reward)
         w2 = 1 - angle_reward / (dis_reward + angle_reward + posture_reward)
         w3 = 1 - posture_reward / (dis_reward + angle_reward + posture_reward)
-        return dis_reward * w1 + angle_reward * w2 + posture_reward * w3
-        # return dis_reward + 0.1 * angle_reward + 0.1 * posture_reward
+        # return dis_reward * w1 + angle_reward * w2 + posture_reward * w3
+        return dis_reward + 0.1 * angle_reward + 0.1 * posture_reward
         # return dis_reward + 0.1 * angle_reward2
 
     def get_long_term_reward(self, timeout) -> int:
