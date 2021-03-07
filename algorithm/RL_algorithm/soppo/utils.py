@@ -13,10 +13,13 @@ def constfn(val):
 
 def flatten_axes01(arr):
     s = arr.shape
-    if len(s) > 2:
-        return arr.reshape(s[0]*s[1], *s[2:])
-    else:
-        return arr
+    try:
+        arr_reshape = arr.reshape(s[0] * s[1], *s[2:])
+    except:
+        print("arr_shape = ", arr.shape)
+        print("arr = ", arr)
+        raise TypeError
+    return arr_reshape
 
 
 def get_target_updates(vars, target_vars, tau):
