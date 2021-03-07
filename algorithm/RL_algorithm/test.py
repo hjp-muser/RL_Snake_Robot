@@ -213,4 +213,4 @@ if __name__ == '__main__':
     dsoppo_args = ['--env=reach_target-state-param-v2', '--num_env=2', '--alg=soppo', '--total_timesteps=1e6']
     dsoppo_play = ['--env=reach_target-state-param-v2', '--num_env=2', '--alg=soppo', '--total_timesteps=0', '--play']
 
-    main(dsoppo_play)
+    main(dsoppo_args)

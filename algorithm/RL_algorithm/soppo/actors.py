@@ -42,7 +42,7 @@ class StochasticActorModel(object):
         # Based on the action space, will select what probability distribution type
         self.pdtype = make_pdtype(action_space)
 
-        self.pd, self.pi_mean = self.pdtype.pdfromlatent(self.actor_latent, init_scale=0.01)
+        self.pd, self.pd_param = self.pdtype.pdfromlatent(self.actor_latent, init_scale=0.01)
 
         # Take an action
         self.action = self.pd.sample()
@@ -87,6 +87,10 @@ class StochasticActorModel(object):
     def cal_entropy(self):
         return self.pd.entropy()
 
+    def cal_pdparams(self, observation, **extra_feed):
+        pdparams = self._evaluate(self.pd_param, observation, **extra_feed)
+        return pdparams
+
     def save(self, save_path):
         tf_util.save_state(save_path, sess=self.sess)
 
@@ -123,7 +127,7 @@ class DeterminedActorModel(object):
         # Based on the action space, will select what probability distribution type
         self.pdtype = make_pdtype(action_space)
 
-        self.pd, pd_param = self.pdtype.pdfromlatent(self.actor_latent, init_scale=0.01)
+        self.pd, self.pd_param = self.pdtype.pdfromlatent(self.actor_latent, init_scale=0.01)
 
         # Take an action
         self.action = self.pd.mode()
@@ -159,6 +163,10 @@ class DeterminedActorModel(object):
 
         action = self._evaluate(self.action, observation, **extra_feed)
         return action
+
+    def cal_pdparams(self, observation, **extra_feed):
+        pdparams = self._evaluate(self.pd_param, observation, **extra_feed)
+        return pdparams
 
     def save(self, save_path):
         tf_util.save_state(save_path, sess=self.sess)

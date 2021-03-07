@@ -68,7 +68,7 @@ class ValueModel(object):
         (action, value estimate, next state, negative log likelihood of the action under current policy parameters) tuple
         """
 
-        vpred = self._evaluate([self.vf], observation, **extra_feed)
+        vpred = self._evaluate(self.vf, observation, **extra_feed)
         return vpred
 
     def save(self, save_path):
@@ -161,7 +161,7 @@ class QValueModel(object):
         (action, value estimate, next state, negative log likelihood of the action under current policy parameters) tuple
         """
 
-        qpred = self._evaluate([self.qf], observations, **extra_feed)
+        qpred = self._evaluate(self.qf, observations, **extra_feed)
         return qpred
 
     def save(self, save_path):

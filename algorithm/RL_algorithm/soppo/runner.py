@@ -37,7 +37,7 @@ class Runner(AbstractEnvRunner):
 
     def run(self):
         # Here, we init the lists that will contain the mb of experiences
-        mb_obs, mb_rewards, mb_actions, mb_values, mb_dones, mb_neglogpacs = [], [], [], [], [], []
+        mb_obs, mb_rewards, mb_actions, mb_next_obs, mb_dones = [], [], [], [], []
         epinfos = []
         # For n in range number of steps
         for _ in range(self.nsteps):
@@ -55,11 +55,12 @@ class Runner(AbstractEnvRunner):
                 actions = np.array(actions)
             mb_obs.append(self.obs.copy())
             mb_actions.append(actions)
-            mb_dones.append(self.dones)
             # Take actions in env and look the results
             # Infos contains a ton of useful informations
             self.obs[:], rewards, self.dones, infos = self.env.step(actions)
+            mb_next_obs.append(self.obs.copy())
             mb_rewards.append(rewards)
+            mb_dones.append(self.dones)
             for info in infos:
                 maybeepinfo = info.get('episode')
                 if maybeepinfo:
@@ -69,4 +70,12 @@ class Runner(AbstractEnvRunner):
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype).swapaxes(0, 1)
         mb_actions = np.asarray(mb_actions).swapaxes(0, 1)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(0, 1)
-        return mb_obs, mb_actions, mb_rewards, epinfos
+        mb_next_obs = np.asarray(mb_next_obs, dtype=self.obs.dtype).swapaxes(0, 1)
+        mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(0, 1)
+
+        env_trajectories = []
+        for env_id in range(self.nenv):
+            env_trajectory = ([mb_obs[env_id], mb_actions[env_id], mb_rewards[env_id], mb_next_obs[env_id], mb_dones[env_id]])
+            env_trajectories.append(env_trajectory)
+
+        return env_trajectories, epinfos

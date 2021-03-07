@@ -1,29 +1,19 @@
 import os
+from functools import reduce
 import tensorflow as tf
-from baselines.common.tf_util import get_session, initialize
-try:
-    from baselines.common.mpi_adam_optimizer import MpiAdamOptimizer
-    from mpi4py import MPI
-    from baselines.common.mpi_util import sync_from_root
-except ImportError:
-    MPI = None
+import tensorflow.contrib as tc
+
+from baselines import logger
 
 from algorithm.RL_algorithm.soppo.actors import build_actor
 from algorithm.RL_algorithm.soppo.critics import build_value
-
-
-def constfn(val):
-    def f(_):
-        return val
-
-    return f
+from algorithm.RL_algorithm.soppo.utils import get_target_updates, constfn, get_session
 
 
 class Model(object):
-    def __init__(self, *, network, obs_space, ac_space, lr=3e-4, cliprange=0.2, nsteps=128, nminibatches=4,
-                 ent_coef=0.0, vf_coef=0.25, max_grad_norm=0.5, mpi_rank_weight=1,
-                 comm=None, **network_kwargs):
-
+    def __init__(self, *, network, obs_space, ac_space, vf_model=None, target_vf_model=None, sess=None, cliprange=0.2,
+                 lr=3e-4, gamma=0.99, lam=0.95, tau=0.01, pg_coef=1.0, vf_coef=0.25, kl_coef=0.5, ent_coef=0.0,
+                 actor_reg_coef=0.1, critic_reg_coef=0.1, max_grad_norm=0.5, **network_kwargs):
         """
         Parameters:
         ----------
@@ -69,142 +59,233 @@ class Model(object):
                                           For instance, 'mlp' network architecture has arguments num_hidden and num_layers.
 
         """
+        self.initial_state = None  # recurrent architectures not supported yet
 
-        if MPI is not None and comm is None:
-            comm = MPI.COMM_WORLD
-
+        # Model Parameters.
         self.observation_space = obs_space
         self.action_space = ac_space
-        self.sess = sess = get_session()
+        self.gamma = gamma
+        self.lam = lam
+        self.tau = tau
+        self.pg_coef = pg_coef
+        self.vf_coef = vf_coef
+        self.kl_coef = kl_coef
+        self.ent_coef = ent_coef
+        self.actor_reg_coef = actor_reg_coef
+        self.critic_reg_coef = critic_reg_coef
+        self.max_grad_norm = max_grad_norm
 
         if isinstance(lr, float):
             self.lr = constfn(lr)
         else:
             assert callable(lr)
+
         if isinstance(cliprange, float):
             self.cliprange = constfn(cliprange)
         else:
             assert callable(cliprange)
 
-        # Calculate the batch_size
-        self.nminibatches = nminibatches
-        self.nenvs = 1
-        self.nsteps = nsteps
-        self.nbatch = self.nenvs * self.nsteps
-        self.nbatch_train = self.nbatch // nminibatches
+        if sess is None:
+            self.sess = get_session()
+        else:
+            self.sess = sess
 
-        with tf.variable_scope('shared_model', reuse=tf.AUTO_REUSE):
-            with tf.variable_scope('current'):
-                with tf.variable_scope('vf_model'):
-                    # create vf model, default: mlp value network
-                    value_network = build_value(obs_space, network, **network_kwargs)
-                    self.vf_model = vf_model = value_network(sess=self.sess)
+        if vf_model is None:
+            self.has_shared_vf_model = False
+            with tf.variable_scope('ppo2_model', reuse=tf.AUTO_REUSE):
+                with tf.variable_scope('current'):
+                    with tf.variable_scope('vf_model'):
+                        # create vf model, default: mlp value network
+                        value_network = build_value(obs_space, network, **network_kwargs)
+                        self.vf_model = value_network(sess=self.sess)
+                with tf.variable_scope('target'):
+                    with tf.variable_scope('vf_model'):
+                        # create vf model, default: mlp value network
+                        value_network = build_value(obs_space, network, **network_kwargs)
+                        self.target_vf_model = value_network(sess=self.sess)
+        else:
+            self.has_shared_vf_model = True
+            self.vf_model = vf_model
+            self.target_vf_model = target_vf_model
 
         with tf.variable_scope('ppo2_model', reuse=tf.AUTO_REUSE):
             with tf.variable_scope('current'):
-                with tf.variable_scope('policy'):
+                with tf.variable_scope('policy_model'):
                     # create policy model, default: mlp policy network
                     policy_network = build_actor(obs_space, ac_space, network, **network_kwargs)
-                    self.policy_model = policy_model = policy_network(sess=self.sess)
+                    self.policy_model = policy_network(sess=self.sess)
+            with tf.variable_scope('target'):
+                with tf.variable_scope('policy_model'):
+                    policy_network = build_actor(obs_space, ac_space, network, **network_kwargs)
+                    self.target_policy_model = policy_network(sess=self.sess)
+
+        if self.has_shared_vf_model:
+            self.vf_train_variables = tf.trainable_variables('shared_model/current/vf_model')
+            self.target_vf_train_variables = tf.trainable_variables('shared_model/target/vf_model')
+        else:
+            self.vf_train_variables = tf.trainable_variables('ppo2_model/current/vf_model')
+            self.target_vf_train_variables = tf.trainable_variables('ppo2_model/target/vf_model')
+        self.policy_train_variables = tf.trainable_variables('ppo2_model/current/policy_model')
+        self.target_policy_train_variables = tf.trainable_variables('ppo2_model/target/policy_model')
+        self.ppo_train_variables = self.policy_train_variables + self.target_policy_train_variables
+        if not self.has_shared_vf_model:
+            self.ppo_train_variables += self.vf_train_variables + self.target_vf_train_variables
 
         # CREATE THE PLACEHOLDERS
-        self.A = A = policy_model.pdtype.sample_placeholder([None])
-        self.ADV = ADV = tf.placeholder(tf.float32, [None])
-        self.R = R = tf.placeholder(tf.float32, [None])
-        # Keep track of old actor
-        self.OLDNEGLOGPAC = OLDNEGLOGPAC = tf.placeholder(tf.float32, [None])
-        # Keep track of old critic
-        self.OLDVPRED = OLDVPRED = tf.placeholder(tf.float32, [None])
-        self.LR = LR = tf.placeholder(tf.float32, [])
-        # Cliprange
-        self.CLIPRANGE = CLIPRANGE = tf.placeholder(tf.float32, [])
+        self.action_ph = self.policy_model.pdtype.sample_placeholder([None])
+        self.adv_ph = tf.placeholder(tf.float32, [None])
+        self.return_ph = tf.placeholder(tf.float32, [None])
+        self.lr_ph = tf.placeholder(tf.float32, [])
+        self.cliprange_ph = tf.placeholder(tf.float32, [])
 
-        neglogpac = policy_model.cal_action_neglogp(A)
+        self.step = self.policy_model.step
+        self.value = self.target_vf_model.step
+        self.def_path_pre = os.path.dirname(os.path.abspath(__file__)) + '/ppo_tmp/'
+
+        # Set up parts
+        self.stats_names = []
+        self.stats_list = []
+        self._setup_actor_optimizer()
+        self._setup_critic_optimizer()
+        self._setup_target_network_updates()
+        self._initialize()
+
+    def _setup_actor_optimizer(self):
+        logger.info('setting up ppo actor optimizer')
+        self.actor_train_variables = self.policy_train_variables
+
+        # Calculate ratio (pi current policy / pi old policy)
+        neglogpac = self.policy_model.cal_action_neglogp(self.action_ph)
+        old_neglogpac = self.target_policy_model.cal_action_neglogp(self.action_ph)  # TODO: check no gradient
+        ratio = tf.exp(neglogpac - old_neglogpac)
+        # Defining Loss = - J is equivalent to max J
+        pg_loss1 = self.adv_ph * ratio
+        pg_loss2 = self.adv_ph * tf.clip_by_value(ratio, 1.0 - self.cliprange_ph, 1.0 + self.cliprange_ph)
+        # Final PG loss
+        pg_loss = tf.reduce_mean(tf.maximum(pg_loss1, pg_loss2))
+
+        # Calculate kl diff between the new policy and the old
+        kl_loss = tf.reduce_mean(tf.square(neglogpac - old_neglogpac))
 
         # Calculate the entropy
         # Entropy is used to improve exploration by limiting the premature convergence to suboptimal policy.
-        entropy = tf.reduce_mean(policy_model.cal_entropy())
+        entropy = tf.reduce_mean(self.policy_model.cal_entropy())
+
+        # clipfrac = tf.reduce_mean(tf.to_float(tf.greater(tf.abs(ratio - 1.0), self.cliprange_ph)))  # 裁剪数据占总数据比例
+
+        self.actor_loss = self.pg_coef * pg_loss + self.kl_coef * kl_loss - self.ent_coef * entropy
+
+        if self.actor_reg_coef > 0.:
+            actor_reg_vars = [var for var in self.actor_train_variables if
+                              var.name.endswith('/w:0') and 'output' not in var.name]
+            for var in actor_reg_vars:
+                logger.info('  regularizing: {}'.format(var.name))
+            logger.info('  applying actor regularization with {}'.format(self.actor_reg_coef))
+            actor_reg = tc.layers.apply_regularization(
+                tc.layers.l2_regularizer(self.actor_reg_coef),
+                weights_list=actor_reg_vars
+            )
+            self.actor_loss += actor_reg
+        actor_shapes = [var.get_shape().as_list() for var in self.actor_train_variables]
+        actor_nb_params = sum([reduce(lambda x, y: x * y, shape) for shape in actor_shapes])
+        logger.info('  actor shapes: {}'.format(actor_shapes))
+        logger.info('  actor params: {}'.format(actor_nb_params))
+
+        self.actor_trainer = tf.train.AdamOptimizer(learning_rate=self.lr_ph, epsilon=1e-5)
+        grads_and_var = self.actor_trainer.compute_gradients(self.actor_loss, self.actor_train_variables)
+        grads, var = zip(*grads_and_var)
+        if self.max_grad_norm is not None:
+            # Clip the gradients (normalize)
+            grads, _grad_norm = tf.clip_by_global_norm(grads, self.max_grad_norm)
+        self.actor_grads = grads
+        self.stats_list.extend([pg_loss, kl_loss, entropy, self.actor_loss])  # , self.actor_grads
+        self.stats_names.extend(['pg_loss', 'kl_loss', 'entropy', 'actor_loss'])  # , 'actor_grads'
+        grads_and_var = list(zip(grads, var))
+        self.actor_optimizer = self.actor_trainer.apply_gradients(grads_and_var)
+
+    def _setup_critic_optimizer(self):
+        logger.info('setting up ppo critic optimizer')
+        self.critic_train_variables = self.vf_train_variables
 
         # Clip the value to reduce variability during Critic training
         # Get the predicted value
-        vpred = vf_model.vf
-        vpredclipped = OLDVPRED + tf.clip_by_value(vpred - OLDVPRED, - CLIPRANGE, CLIPRANGE)
+        vpred = self.vf_model.vf
+        old_vpred = self.target_vf_model.vf
+        vpredclipped = old_vpred + tf.clip_by_value(vpred - old_vpred, - self.cliprange_ph, self.cliprange_ph)
         # Unclipped value
-        vf_losses1 = tf.square(vpred - R)
+        vf_loss1 = tf.square(vpred - self.return_ph)
         # Clipped value
-        vf_losses2 = tf.square(vpredclipped - R)
-        vf_loss = tf.reduce_mean(tf.maximum(vf_losses1, vf_losses2))
+        vf_loss2 = tf.square(vpredclipped - self.return_ph)
+        vf_loss = tf.reduce_mean(tf.maximum(vf_loss1, vf_loss2))
+        self.critic_loss = self.vf_coef * vf_loss
 
-        # Calculate ratio (pi current policy / pi old policy)
-        ratio = tf.exp(OLDNEGLOGPAC - neglogpac)
-        # Defining Loss = - J is equivalent to max J
-        pg_losses = -ADV * ratio
-        pg_losses2 = -ADV * tf.clip_by_value(ratio, 1.0 - CLIPRANGE, 1.0 + CLIPRANGE)
-        # Final PG loss
-        pg_loss = tf.reduce_mean(tf.maximum(pg_losses, pg_losses2))
+        if self.critic_reg_coef > 0.:
+            critic_reg_vars = [var for var in self.critic_train_variables if
+                               var.name.endswith('/w:0') and 'output' not in var.name]
+            for var in critic_reg_vars:
+                logger.info('  regularizing: {}'.format(var.name))
+            logger.info('  applying l2 regularization with {}'.format(self.critic_reg_coef))
+            critic_reg = tc.layers.apply_regularization(
+                tc.layers.l2_regularizer(self.critic_reg_coef),
+                weights_list=critic_reg_vars
+            )
+            self.critic_loss += critic_reg
+        critic_shapes = [var.get_shape().as_list() for var in self.critic_train_variables]
+        critic_nb_params = sum([reduce(lambda x, y: x * y, shape) for shape in critic_shapes])
+        logger.info('  critic shapes: {}'.format(critic_shapes))
+        logger.info('  critic params: {}'.format(critic_nb_params))
 
-        approxkl = .5 * tf.reduce_mean(tf.square(neglogpac - OLDNEGLOGPAC))
-        clipfrac = tf.reduce_mean(tf.to_float(tf.greater(tf.abs(ratio - 1.0), CLIPRANGE)))  # 裁剪数据占总数据比例
-
-        # CALCULATE THE LOSS
-        # Total loss = Policy gradient loss - entropy * entropy coefficient + Value coefficient * value loss
-        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
-
-        # UPDATE THE PARAMETERS USING LOSS
-
-        # 1. Get the model parameters
-        self.train_variables = tf.trainable_variables('ppo2_model') + tf.trainable_variables('vf_model')
-        # 2. Build our trainer
-        if comm is not None and comm.Get_size() > 1:
-            self.trainer = MpiAdamOptimizer(comm, learning_rate=LR, mpi_rank_weight=mpi_rank_weight, epsilon=1e-5)
-        else:
-            self.trainer = tf.train.AdamOptimizer(learning_rate=LR, epsilon=1e-5)
-        # 3. Calculate the gradients
-        grads_and_var = self.trainer.compute_gradients(loss, self.train_variables)
+        self.critic_trainer = tf.train.AdamOptimizer(learning_rate=self.lr_ph, epsilon=1e-5)
+        grads_and_var = self.critic_trainer.compute_gradients(self.critic_loss, self.critic_train_variables)
         grads, var = zip(*grads_and_var)
-
-        if max_grad_norm is not None:
+        if self.max_grad_norm is not None:
             # Clip the gradients (normalize)
-            grads, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
+            grads, _grad_norm = tf.clip_by_global_norm(grads, self.max_grad_norm)
+        self.critic_grads = grads
+        self.stats_list.extend([vf_loss, self.critic_loss])  # , self.critic_grads
+        self.stats_names.extend(['vf_loss', 'critic_loss'])  # , 'critic_grads'
         grads_and_var = list(zip(grads, var))
+        self.critic_optimizer = self.critic_trainer.apply_gradients(grads_and_var)
 
-        self.grads = grads
-        self.var = var
-        self._train_op = self.trainer.apply_gradients(grads_and_var)
-        self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
-        self.stats_list = [pg_loss, vf_loss, entropy, approxkl, clipfrac]
+    def _setup_target_network_updates(self):
+        logger.info('setting up ppo target updates ...')
+        logger.info('  {} <- {}'.format('ppo_target_policy', 'ppo_current_policy'))
+        policy_init_updates, policy_soft_updates = get_target_updates(self.policy_train_variables,
+                                                                      self.target_policy_train_variables,
+                                                                      self.tau)
+        if self.has_shared_vf_model:
+            logger.info('  {} <- {}'.format('shared_target_vf', 'shared_current_vf'))
+        else:
+            logger.info('  {} <- {}'.format('ppo_target_vf', 'ppo_current_vf'))
+        vf_init_updates, vf_soft_updates = get_target_updates(self.vf_train_variables,
+                                                              self.target_vf_train_variables,
+                                                              self.tau)
+        self.target_init_updates = [policy_init_updates, vf_init_updates]
+        self.target_soft_updates = [policy_soft_updates, vf_soft_updates]
 
-        self.policy_model = policy_model
-        self.step = policy_model.step
-        self.value = vf_model.step
-        self.initial_state = None
-        self.def_path_pre = os.path.dirname(os.path.abspath(__file__)) + '/ppo_tmp/'
+    def _initialize(self):
+        self.sess.run(tf.global_variables_initializer())
+        self.sess.run(self.target_init_updates)
 
-        # initialize
-        initialize()
-        global_variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="")
-        if MPI is not None:
-            sync_from_root(sess, global_variables, comm=comm)  # pylint: disable=E1101
+    def train(self, progress_fraction, observations, actions, advantages, output_stats=True):
+        returns = advantages + self.target_vf_model.step(observations)
+        cur_lr = self.lr(progress_fraction)
+        cur_cliprange = self.cliprange(progress_fraction)
 
-    def train(self, lr, cliprange, obs, returns, actions, values, neglogpacs):
-        # Here we calculate advantage A(s,a) = R + yV(s') - V(s)
-        # Returns = R + yV(s')
-        advs = returns - values
-
-        # Normalize the advantages
-        advs = (advs - advs.mean()) / (advs.std() + 1e-8)
-
+        train_ops = [self.actor_optimizer, self.critic_optimizer]
         td_map = {
-            self.policy_model.obs_ph: obs,
-            self.A: actions,
-            self.ADV: advs,
-            self.R: returns,
-            self.LR: lr,
-            self.CLIPRANGE: cliprange,
-            self.OLDNEGLOGPAC: neglogpacs,
-            self.OLDVPRED: values
+            self.policy_model.obs_ph: observations,
+            self.target_policy_model.obs_ph: observations,
+            self.vf_model.obs_ph: observations,
+            self.target_vf_model.obs_ph: observations,
+            self.action_ph: actions,
+            self.adv_ph: advantages,
+            self.return_ph: returns,
+            self.lr_ph: cur_lr,
+            self.cliprange_ph: cur_cliprange,
         }
+        self.sess.run(train_ops, feed_dict=td_map)
+        self.sess.run(self.target_soft_updates)
 
-        # return stats_list result
-        # print (self.sess.run(self.grads, td_map))
-        return self.sess.run(self.stats_list + [self._train_op], td_map)[:-1]
+        if output_stats:
+            return self.sess.run(self.stats_list, td_map)

@@ -1,4 +1,6 @@
 import numpy as np
+from collections import deque
+import random
 
 
 class RingBuffer(object):
@@ -32,6 +34,35 @@ class RingBuffer(object):
         self.data[(self.start + self.length - 1) % self.maxlen] = v
 
 
+class FifoBuffer(object):
+    def __init__(self, maxlen):
+        self.buffer = deque(maxlen=maxlen)
+
+    def __len__(self):
+        return len(self.buffer)
+
+    @property
+    def length(self):
+        return len(self.buffer)
+
+    def __getitem__(self, idx):
+        if idx < 0 or idx >= self.length:
+            raise KeyError()
+        return self.buffer[idx]
+
+    def append(self, data):
+        self.buffer.append(data)
+
+    def extend(self, data_list):
+        self.buffer.extend(data_list)
+
+    def get_batch(self, batch_size):
+        if batch_size > self.length:
+            batch_size = self.length
+        mini_batch = random.sample(self.buffer, batch_size)
+        return mini_batch
+
+
 def array_min2d(x):
     x = np.array(x)
     if x.ndim >= 2:
@@ -39,45 +70,86 @@ def array_min2d(x):
     return x.reshape(-1, 1)
 
 
+def decompose_trajectories(batches):
+    observations = np.array([batches[i][0] for i in range(len(batches))])
+    actions = np.array([batches[i][1] for i in range(len(batches))])
+    rewards = np.array([batches[i][2] for i in range(len(batches))])
+    next_observations = np.array([batches[i][3] for i in range(len(batches))])
+    terminals = np.array([batches[i][4] for i in range(len(batches))])
+
+    return observations, actions, rewards, next_observations, terminals
+
+
 class Memory(object):
-    def __init__(self, limit, action_shape, observation_shape):
+    def __init__(self, limit):
         self.limit = limit
+        self.stochastic_trajectories = FifoBuffer(limit)
+        self.determined_trajectories = FifoBuffer(limit)
+        self.temp_sto_trajectory = {'observations': [], 'actions': [], 'rewards': [],
+                                      'next_observations': [], 'terminals': []}
+        self.temp_det_trajectory = {'observations': [], 'actions': [], 'rewards': [],
+                                      'next_observations': [], 'terminals': []}
+        self.next_check_idx = 0
 
-        self.observations0 = RingBuffer(limit, shape=observation_shape)
-        self.actions = RingBuffer(limit, shape=action_shape)
-        self.rewards = RingBuffer(limit, shape=(1,))
-        self.terminals1 = RingBuffer(limit, shape=(1,))
-        self.observations1 = RingBuffer(limit, shape=observation_shape)
+    def store(self, sto_tra, det_tra):
+        complete_sto_tra_list = self._store_temp_trajectory(self.temp_sto_trajectory, *sto_tra)
+        complete_det_tra_list = self._store_temp_trajectory(self.temp_det_trajectory, *det_tra)
 
-    def sample(self, batch_size):
+        self.stochastic_trajectories.extend(complete_sto_tra_list)
+        self.determined_trajectories.extend(complete_det_tra_list)
+
+    def _store_temp_trajectory(self, temp_trajectory, observations, actions, rewards, next_observations, terminals):
+        temp_trajectory['observations'].extend(observations)
+        temp_trajectory['actions'].extend(actions)
+        temp_trajectory['rewards'].extend(rewards)
+        temp_trajectory['next_observations'].extend(next_observations)
+        temp_trajectory['terminals'].extend(terminals)
+
+        complete_trajectories = []
+        terminal_inds = []
+
+        check_len = len(temp_trajectory['terminals'])
+        for idx in range(self.next_check_idx, check_len):
+            if temp_trajectory['terminals'][idx]:
+                terminal_inds.append(idx)
+        self.next_check_idx = len(temp_trajectory['terminals'])
+        begin_idx = 0
+        for idx in terminal_inds:
+            complete_trajectory = (temp_trajectory['observations'][begin_idx:idx+1], temp_trajectory['actions'][begin_idx:idx+1],
+                                   temp_trajectory['rewards'][begin_idx:idx+1], temp_trajectory['next_observations'][begin_idx:idx+1],
+                                   temp_trajectory['terminals'][begin_idx:idx+1])
+            begin_idx = idx + 1
+            complete_trajectories.append(complete_trajectory)
+        temp_trajectory['observations'] = temp_trajectory['observations'][begin_idx:]
+        temp_trajectory['actions'] = temp_trajectory['actions'][begin_idx:]
+        temp_trajectory['rewards'] = temp_trajectory['rewards'][begin_idx:]
+        temp_trajectory['next_observations'] = temp_trajectory['next_observations'][begin_idx:]
+        temp_trajectory['terminals'] = temp_trajectory['terminals'][begin_idx:]
+        self.next_check_idx -= begin_idx
+
+        return complete_trajectories
+
+    def sample(self, batch_size, stochastic_proportion=0.5):
         # Draw such that we always have a proceeding element.
-        batch_idxs = np.random.randint(self.nb_entries - 2, size=batch_size)
-
-        obs0_batch = self.observations0.get_batch(batch_idxs)
-        obs1_batch = self.observations1.get_batch(batch_idxs)
-        action_batch = self.actions.get_batch(batch_idxs)
-        reward_batch = self.rewards.get_batch(batch_idxs)
-        terminal1_batch = self.terminals1.get_batch(batch_idxs)
+        assert batch_size > 1
+        stochastic_batch_size = int(batch_size * stochastic_proportion)
+        determined_batch_size = int(batch_size * (1 - stochastic_proportion))
+        assert stochastic_batch_size > 0
+        assert determined_batch_size > 0
+        stochastic_trajectories_batch = self.stochastic_trajectories.get_batch(stochastic_batch_size)
+        determined_trajectories_batch = self.determined_trajectories.get_batch(determined_batch_size)
+        batches = stochastic_trajectories_batch + determined_trajectories_batch
+        observations, actions, rewards, next_observations, terminals = decompose_trajectories(batches)
 
         result = {
-            'obs0': array_min2d(obs0_batch),
-            'obs1': array_min2d(obs1_batch),
-            'rewards': array_min2d(reward_batch),
-            'actions': array_min2d(action_batch),
-            'terminals1': array_min2d(terminal1_batch),
+            'observations': observations,
+            'actions': actions,
+            'rewards': rewards,
+            'next_observations': next_observations,
+            'terminals': terminals
         }
         return result
 
-    def append(self, obs0, action, reward, obs1, terminal1, training=True):
-        if not training:
-            return
-
-        self.observations0.append(obs0)
-        self.actions.append(action)
-        self.rewards.append(reward)
-        self.observations1.append(obs1)
-        self.terminals1.append(terminal1)
-
     @property
     def nb_entries(self):
-        return len(self.observations0)
+        return len(self.stochastic_trajectories) + len(self.determined_trajectories)
