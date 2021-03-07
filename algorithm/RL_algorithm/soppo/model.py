@@ -151,10 +151,11 @@ class Model(object):
                 logger.record_tabular("misc/serial_timesteps", update * self.nsteps)
                 logger.record_tabular("misc/update_timesteps", update)
                 # logger.record_tabular("misc/explained_variance", float(ev))
-                for (stat_val, stat_name) in zip(self.ppo_model.stats_list, self.ppo_model.stats_names):
-                    logger.record_tabular('ppo_loss/' + stat_name, stat_val)
-                for (stat_val, stat_name) in zip(self.ddpg_model.stats_list, self.ddpg_model.stats_names):
-                    logger.record_tabular('ddpg_loss/' + stat_name, stat_val)
+                
+                # for (stat_val, stat_name) in zip(self.ppo_model.stats_list, self.ppo_model.stats_names):
+                #     logger.record_tabular('ppo_loss/' + stat_name, stat_val)
+                # for (stat_val, stat_name) in zip(self.ddpg_model.stats_list, self.ddpg_model.stats_names):
+                #     logger.record_tabular('ddpg_loss/' + stat_name, stat_val)
                 logger.dump_tabular()
 
             if save_interval and update % save_interval == 0:
