@@ -289,7 +289,7 @@ class Model(object):
     #     for b in range(B):
     #         self.memory.append(obs0[b], action[b], reward[b], obs1[b], terminal1[b])
 
-    def train(self, progress_fraction, observations, advantages, ref_pdparams, output_stats=True):
+    def train(self, progress_fraction, observations, advantages, ref_pdparams=None, output_stats=True):
         target_qvalue = advantages + self.target_vf_model.step(observations)
         cur_lr = self.lr(progress_fraction)
 

@@ -287,7 +287,7 @@ class Model(object):
         self.sess.run(tf.global_variables_initializer())
         self.sess.run(self.target_init_updates)
 
-    def train(self, progress_fraction, observations, actions, advantages, ref_pdparams, output_stats=True):
+    def train(self, progress_fraction, observations, actions, advantages, ref_pdparams=None, output_stats=True):
         returns = advantages + self.target_vf_model.step(observations)
         cur_lr = self.lr(progress_fraction)
         cur_cliprange = self.cliprange(progress_fraction)

@@ -148,7 +148,7 @@ class Model(object):
                     ddpg_ref_pdparam = self.ppo_model.policy_model.cal_pdparams(ddpg_train_obs)
                     ddpg_train_input = (ddpg_train_obs, ddpg_train_adv, ddpg_ref_pdparam)
                 else:
-                    ddpg_train_input = (ddpg_train_obs, ddpg_train_adv, None)
+                    ddpg_train_input = (ddpg_train_obs, ddpg_train_adv)
                 ddpg_batch_size = len(ddpg_train_obs)
                 ddpg_inds = np.arange(ddpg_batch_size)
 
