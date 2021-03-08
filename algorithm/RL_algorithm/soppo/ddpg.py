@@ -294,17 +294,17 @@ class Model(object):
         cur_lr = self.lr(progress_fraction)
 
         train_ops = [self.actor_optimizer, self.critic_optimizer]
-        if ref_pdparams is not None:
-            train_ops.append(self.referer_optimizer)
         td_map = {
             self.policy_model.obs_ph: observations,
             self.target_policy_model.obs_ph: observations,
             self.vf_model.obs_ph: observations,
             self.target_vf_model.obs_ph: observations,
-            self.ref_ph: ref_pdparams,
             self.target_qvalue_ph: target_qvalue,
             self.lr_ph: cur_lr
         }
+        if ref_pdparams is not None:
+            train_ops.append(self.referer_optimizer)
+            td_map.update({self.ref_ph: ref_pdparams})
         self.sess.run(train_ops, feed_dict=td_map)
         self.sess.run(self.target_soft_updates)
 

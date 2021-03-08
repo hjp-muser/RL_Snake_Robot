@@ -293,8 +293,6 @@ class Model(object):
         cur_cliprange = self.cliprange(progress_fraction)
 
         train_ops = [self.actor_optimizer, self.critic_optimizer]
-        if ref_pdparams is not None:
-            train_ops.append(self.referer_optimizer)
         td_map = {
             self.policy_model.obs_ph: observations,
             self.target_policy_model.obs_ph: observations,
@@ -303,10 +301,12 @@ class Model(object):
             self.action_ph: actions,
             self.adv_ph: advantages,
             self.return_ph: returns,
-            self.ref_ph: ref_pdparams,
             self.lr_ph: cur_lr,
             self.cliprange_ph: cur_cliprange,
         }
+        if ref_pdparams is not None:
+            train_ops.append(self.referer_optimizer)
+            td_map.update({self.ref_ph: ref_pdparams})
         self.sess.run(train_ops, feed_dict=td_map)
         self.sess.run(self.target_soft_updates)
 
