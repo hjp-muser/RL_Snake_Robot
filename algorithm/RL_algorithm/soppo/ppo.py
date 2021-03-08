@@ -133,12 +133,12 @@ class Model(object):
             self.ppo_train_variables += self.vf_train_variables + self.target_vf_train_variables
 
         # CREATE THE PLACEHOLDERS
-        self.action_ph = self.policy_model.pdtype.sample_placeholder([None])
-        self.adv_ph = tf.placeholder(tf.float32, [None])
-        self.return_ph = tf.placeholder(tf.float32, [None])
-        self.ref_ph = self.policy_model.pdtype.param_placeholder([None])
-        self.lr_ph = tf.placeholder(tf.float32, [])
-        self.cliprange_ph = tf.placeholder(tf.float32, [])
+        self.action_ph = self.policy_model.pdtype.sample_placeholder([None], name='ppo_ac_ph')
+        self.adv_ph = tf.placeholder(tf.float32, [None, 1], name='ppo_adv_ph')
+        self.return_ph = tf.placeholder(tf.float32, [None, 1], name='ppo_ret_ph')
+        self.ref_ph = self.policy_model.pdtype.param_placeholder([None], name='ppo_ref_ph')
+        self.lr_ph = tf.placeholder(tf.float32, [], name='ppo_lr_ph')
+        self.cliprange_ph = tf.placeholder(tf.float32, [], name='ppo_clip_ph')
 
         self.step = self.policy_model.step
         self.value = self.target_vf_model.step
@@ -288,7 +288,8 @@ class Model(object):
         self.sess.run(self.target_init_updates)
 
     def train(self, progress_fraction, observations, actions, advantages, ref_pdparams=None, output_stats=True):
-        returns = advantages + self.target_vf_model.step(observations)
+        values = self.target_vf_model.step(observations)
+        returns = advantages + values
         cur_lr = self.lr(progress_fraction)
         cur_cliprange = self.cliprange(progress_fraction)
 

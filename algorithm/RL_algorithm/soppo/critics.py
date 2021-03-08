@@ -39,7 +39,6 @@ class ValueModel(object):
         self.vf_latent = tf.layers.flatten(latent)
         self.sess = sess or tf.get_default_session()
         self.vf = fc(self.vf_latent, 'vf_out', 1)
-        self.vf = self.vf[:, 0]
 
     def _evaluate(self, variables, observation, **extra_feed):
         sess = self.sess
@@ -130,7 +129,7 @@ class QValueModel(object):
         self.qf_latent = latent
         self.vf_model = vf_model
         self.actor_model = actor_model
-        self.qf = fc(self.qf_latent, 'qf_out', 1)[:, 0]
+        self.qf = fc(self.qf_latent, 'qf_out', 1)
         self.sess = sess or tf.get_default_session()
 
     def _evaluate(self, variables, observation, **extra_feed):

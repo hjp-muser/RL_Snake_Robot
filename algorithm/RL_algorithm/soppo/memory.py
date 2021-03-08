@@ -71,11 +71,21 @@ def array_min2d(x):
 
 
 def decompose_trajectories(batches):
-    observations = np.array([batches[i][0] for i in range(len(batches))])
-    actions = np.array([batches[i][1] for i in range(len(batches))])
-    rewards = np.array([batches[i][2] for i in range(len(batches))])
-    next_observations = np.array([batches[i][3] for i in range(len(batches))])
-    terminals = np.array([batches[i][4] for i in range(len(batches))])
+    observations = np.concatenate([batches[i][0] for i in range(len(batches))])
+    _len = len(observations)
+    observations = np.concatenate(observations).reshape(_len, -1)
+
+    actions = np.concatenate([batches[i][1] for i in range(len(batches))])
+    actions = np.concatenate(actions).reshape(_len, -1)
+
+    rewards = np.concatenate([batches[i][2] for i in range(len(batches))])
+    rewards = np.concatenate(rewards).reshape(_len, -1)
+
+    next_observations = np.concatenate([batches[i][3] for i in range(len(batches))])
+    next_observations = np.concatenate(next_observations).reshape(_len, -1)
+
+    terminals = np.concatenate([batches[i][4] for i in range(len(batches))])
+    terminals = np.concatenate(terminals).reshape(_len, -1)
 
     return observations, actions, rewards, next_observations, terminals
 
@@ -114,14 +124,16 @@ class Memory(object):
         else:
             next_check_idx = self.det_next_check_idx
         for idx in range(next_check_idx, check_len):
-            if temp_trajectory_buff['terminals'][idx]:
+            terminal = temp_trajectory_buff['terminals'][idx]
+            terminal = terminal[0]
+            if terminal:
                 terminal_inds.append(idx)
         next_check_idx = len(temp_trajectory_buff['terminals'])
         begin_idx = 0
         for idx in terminal_inds:
-            complete_trajectory = (temp_trajectory_buff['observations'][begin_idx:idx+1], temp_trajectory_buff['actions'][begin_idx:idx+1],
+            complete_trajectory = [temp_trajectory_buff['observations'][begin_idx:idx+1], temp_trajectory_buff['actions'][begin_idx:idx+1],
                                    temp_trajectory_buff['rewards'][begin_idx:idx+1], temp_trajectory_buff['next_observations'][begin_idx:idx+1],
-                                   temp_trajectory_buff['terminals'][begin_idx:idx+1])
+                                   temp_trajectory_buff['terminals'][begin_idx:idx+1]]
             begin_idx = idx + 1
             complete_trajectories.append(complete_trajectory)
         temp_trajectory_buff['observations'] = temp_trajectory_buff['observations'][begin_idx:]
@@ -141,13 +153,13 @@ class Memory(object):
     def sample(self, batch_size, stochastic_proportion=0.5):
         # Draw such that we always have a proceeding element.
         assert batch_size > 1
-        stochastic_batch_size = int(batch_size * stochastic_proportion)
-        determined_batch_size = int(batch_size * (1 - stochastic_proportion))
+        stochastic_batch_size = 2   # int(batch_size * stochastic_proportion)
+        determined_batch_size = 1    # int(batch_size * (1 - stochastic_proportion))
         assert stochastic_batch_size > 0
         assert determined_batch_size > 0
         stochastic_trajectories_batch = self.stochastic_trajectories.get_batch(stochastic_batch_size)
         determined_trajectories_batch = self.determined_trajectories.get_batch(determined_batch_size)
-        batches = stochastic_trajectories_batch + determined_trajectories_batch
+        batches = np.concatenate((stochastic_trajectories_batch, determined_trajectories_batch), axis=0)
         observations, actions, rewards, next_observations, terminals = decompose_trajectories(batches)
 
         result = {

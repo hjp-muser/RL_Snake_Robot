@@ -6,12 +6,15 @@ class AbstractEnvRunner(ABC):
     def __init__(self, *, env, models, nsteps):
         self.env = env
         self.models = models
-        self.nenv = nenv = env.num_envs if hasattr(env, 'num_envs') else 1
-        self.batch_ob_shape = (nenv*nsteps,) + env.observation_space.shape
-        self.obs = np.zeros((nenv,) + env.observation_space.shape, dtype=env.observation_space.dtype.name)
-        self.obs[:] = env.reset()
         self.nsteps = nsteps
-        self.dones = [False for _ in range(nenv)]
+        self.nenv = nenv = env.num_envs if hasattr(env, 'num_envs') else 1
+
+        self.obs = np.zeros((nenv,) + env.observation_space.shape, dtype=env.observation_space.dtype.name)
+        self.ac = np.zeros((nenv,) + env.action_space.shape, dtype=env.action_space.dtype.name)
+        self.rewards = np.zeros((nenv, 1), dtype=np.float32)
+        self.terminals = np.zeros((nenv, 1), dtype=np.bool)
+
+        self.obs[:] = env.reset()
 
     @abstractmethod
     def run(self):
@@ -44,7 +47,7 @@ class Runner(AbstractEnvRunner):
             # Given observations, get action
             # We already have self.obs because Runner superclass run self.obs[:] = env.reset() on init
             if isinstance(self.models, list) is False:
-                actions = self.models.step(self.obs)
+                self.ac[:] = actions = self.models.step(self.obs)
             else:
                 assert len(self.models) == self.nenv
                 actions = []
@@ -53,29 +56,33 @@ class Runner(AbstractEnvRunner):
                     action = self.models[i].step(obs_group[i])
                     actions.append(action.squeeze(0))
                 actions = np.array(actions)
-            mb_obs.append(self.obs.copy())
-            mb_actions.append(actions)
-            # Take actions in env and look the results
-            # Infos contains a ton of useful informations
-            self.obs[:], rewards, self.dones, infos = self.env.step(actions)
-            mb_next_obs.append(self.obs.copy())
-            mb_rewards.append(rewards)
-            mb_dones.append(self.dones)
+                self.ac[:] = actions
+
+            mb_obs.append(np.array(self.obs.copy()))
+            mb_actions.append(np.array(self.ac.copy()))
+            self.obs[:], rewards, terminals, infos = self.env.step(actions)
+            rewards = np.reshape(rewards, (self.nenv, 1))
+            self.rewards[:] = rewards
+            terminals = np.reshape(terminals, (self.nenv, 1))
+            self.terminals[:] = terminals
+            mb_next_obs.append(np.array(self.obs.copy()))
+            mb_rewards.append(np.array(self.rewards.copy()))
+            mb_dones.append(np.array(self.terminals.copy()))
             for info in infos:
                 maybeepinfo = info.get('episode')
                 if maybeepinfo:
                     epinfos.append(maybeepinfo)
 
         # batch of steps to batch of rollouts
-        mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype).swapaxes(0, 1)
-        mb_actions = np.asarray(mb_actions).swapaxes(0, 1)
-        mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(0, 1)
-        mb_next_obs = np.asarray(mb_next_obs, dtype=self.obs.dtype).swapaxes(0, 1)
-        mb_dones = np.asarray(mb_dones, dtype=np.bool).swapaxes(0, 1)
+        mb_obs = np.array(mb_obs, dtype=self.obs.dtype).swapaxes(0, 1)
+        mb_actions = np.array(mb_actions, dtype=self.ac.dtype).swapaxes(0, 1)
+        mb_rewards = np.array(mb_rewards, dtype=np.float32).swapaxes(0, 1)
+        mb_next_obs = np.array(mb_next_obs, dtype=self.obs.dtype).swapaxes(0, 1)
+        mb_dones = np.array(mb_dones, dtype=np.bool).swapaxes(0, 1)
 
         env_trajectories = []
         for env_id in range(self.nenv):
             env_trajectory = ([mb_obs[env_id], mb_actions[env_id], mb_rewards[env_id], mb_next_obs[env_id], mb_dones[env_id]])
             env_trajectories.append(env_trajectory)
 
-        return env_trajectories, epinfos
+        return tuple(env_trajectories), np.array(epinfos)

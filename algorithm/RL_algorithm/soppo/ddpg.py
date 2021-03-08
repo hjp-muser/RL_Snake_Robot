@@ -136,10 +136,10 @@ class Model(object):
             self.ddpg_train_variables += self.vf_train_variables + self.target_vf_train_variables
 
         # CREATE THE PLACEHOLDERS
-        self.adv_ph = tf.placeholder(tf.float32, shape=[None], name='advantages')
-        self.target_qvalue_ph = tf.placeholder(tf.float32, shape=[None], name='target_qvalue')
-        self.ref_ph = self.policy_model.pdtype.param_placeholder([None])
-        self.lr_ph = tf.placeholder(tf.float32, [])
+        self.adv_ph = tf.placeholder(tf.float32, shape=[None, 1], name='ddpg_adv_ph')
+        self.target_qvalue_ph = tf.placeholder(tf.float32, shape=[None, 1], name='ddpg_target_qvalue_ph')
+        self.ref_ph = self.policy_model.pdtype.param_placeholder([None], name='ddpg_ref_ph')
+        self.lr_ph = tf.placeholder(tf.float32, [], name='ddpg_lr_ph')
 
         self.step = self.policy_model.step
         self.value = self.vf_model.step

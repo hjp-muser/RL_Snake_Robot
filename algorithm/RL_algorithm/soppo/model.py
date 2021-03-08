@@ -8,7 +8,7 @@ from baselines.common import set_global_seeds
 import tensorflow as tf
 
 from algorithm.RL_algorithm.soppo.critics import build_value
-from algorithm.RL_algorithm.soppo.utils import get_session, GAE, flatten_axes01
+from algorithm.RL_algorithm.soppo.utils import get_session, GAE
 from algorithm.RL_algorithm.utils.tensorflow1.tf_utils import save_variables, load_variables
 
 try:
@@ -41,8 +41,8 @@ class Model(object):
         supervised off-policy ppo
     """
 
-    def __init__(self, *, network, env, lr=3e-4, cliprange=0.2, gamma=0.99, lam=0.95, tau=0.01, pg_coef=1.0,
-                 vf_coef=0.5, kl_coef=0.5, ent_coef=0.5, ref_coef=0.5, actor_reg_coef=0.2, critic_reg_coef=0.2,
+    def __init__(self, *, network, env, lr=5e-4, cliprange=0.2, gamma=0.99, lam=0.95, tau=0.01, pg_coef=1.0,
+                 vf_coef=0.5, kl_coef=0.1, ent_coef=0.5, ref_coef=0.1, actor_reg_coef=0.2, critic_reg_coef=0.2,
                  max_grad_norm=0.5, nsteps=40, sess=None, noise_type=None, **network_kwargs):
 
         self.env = env
@@ -138,10 +138,10 @@ class Model(object):
             else:
                 ddpg_train_wait = False
                 ddpg_trajectories = self.memory.sample(batch_size=num_sample_batch)
-                ddpg_train_obs = flatten_axes01(ddpg_trajectories['observations'])
-                ddpg_train_r = flatten_axes01(ddpg_trajectories['rewards'])
-                ddpg_train_next_obs = flatten_axes01(ddpg_trajectories['next_observations'])
-                ddpg_train_terminal = flatten_axes01(ddpg_trajectories['terminals'])
+                ddpg_train_obs = ddpg_trajectories['observations']
+                ddpg_train_r = ddpg_trajectories['rewards']
+                ddpg_train_next_obs = ddpg_trajectories['next_observations']
+                ddpg_train_terminal = ddpg_trajectories['terminals']
                 ddpg_train_adv = GAE(ddpg_train_obs, ddpg_train_r, ddpg_train_next_obs, ddpg_train_terminal,
                                      self.target_vf_model, self.gamma, self.lam)
                 if advance_alg == 'ppo':

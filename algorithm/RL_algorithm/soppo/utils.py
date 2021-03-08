@@ -11,17 +11,6 @@ def constfn(val):
     return f
 
 
-def flatten_axes01(arr):
-    s = arr.shape
-    try:
-        arr_reshape = arr.reshape(s[0] * s[1], *s[2:])
-    except:
-        print("arr_shape = ", arr.shape)
-        print("arr = ", arr)
-        raise TypeError
-    return arr_reshape
-
-
 def get_target_updates(vars, target_vars, tau):
     soft_updates = []
     init_updates = []
@@ -34,36 +23,17 @@ def get_target_updates(vars, target_vars, tau):
     return tf.group(*init_updates), tf.group(*soft_updates)
 
 
-# def GAE2(observations_groups, rewards_groups, next_observations_groups, terminals_groups, vf_model, gamma, lam):
-#     groups = len(observations_groups)
-#     advantages_groups = []
-#     for g in range(groups):
-#         nsteps = len(observations_groups[g])
-#         advs = np.zeros_like(observations_groups[g])
-#         last_gae_adv = 0
-#         for t in reversed(range(nsteps)):
-#             next_nonterminal = 1.0 - terminals_groups[g][t]
-#             next_values = vf_model.step(next_observations_groups[g][t])
-#             values = vf_model.step(observations_groups[g][t])
-#             # GAE (General Advantage Estimation)
-#             delta = rewards_groups[g][t] + gamma * next_values * next_nonterminal - values
-#             advs[t] = last_gae_adv = delta + gamma * lam * next_nonterminal * last_gae_adv
-#         advantages_groups.append(advs)
-#         advantages_groups = np.array(advantages_groups)
-#     return advantages_groups
-
-
 def GAE(observations, rewards, next_observations, terminals, vf_model, gamma, lam):
     nsteps = len(observations)
     advantages = np.zeros_like(rewards)
     last_gae_adv = 0
     for t in reversed(range(nsteps)):
-        next_nonterminal = 1.0 - terminals[t]
+        nonterminal = 1.0 - terminals[t]
         next_values = vf_model.step(next_observations[t]).squeeze()
         values = vf_model.step(observations[t]).squeeze()
         # GAE (General Advantage Estimation)
-        delta = rewards[t] + gamma * next_values * next_nonterminal - values
-        advantages[t] = last_gae_adv = delta + gamma * lam * next_nonterminal * last_gae_adv
+        delta = rewards[t] + gamma * next_values * nonterminal - values
+        advantages[t] = last_gae_adv = delta + gamma * lam * nonterminal * last_gae_adv
     return advantages
 
 
