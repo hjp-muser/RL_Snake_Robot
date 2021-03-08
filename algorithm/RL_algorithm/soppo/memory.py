@@ -89,43 +89,52 @@ class Memory(object):
                                       'next_observations': [], 'terminals': []}
         self.temp_det_trajectory = {'observations': [], 'actions': [], 'rewards': [],
                                       'next_observations': [], 'terminals': []}
-        self.next_check_idx = 0
+        self.sto_next_check_idx = 0
+        self.det_next_check_idx = 0
 
     def store(self, sto_tra, det_tra):
-        complete_sto_tra_list = self._store_temp_trajectory(self.temp_sto_trajectory, *sto_tra)
-        complete_det_tra_list = self._store_temp_trajectory(self.temp_det_trajectory, *det_tra)
+        complete_sto_tra_list = self._store_temp_trajectory(self.temp_sto_trajectory, 'stochastic', *sto_tra)
+        complete_det_tra_list = self._store_temp_trajectory(self.temp_det_trajectory, 'determined', *det_tra)
 
         self.stochastic_trajectories.extend(complete_sto_tra_list)
         self.determined_trajectories.extend(complete_det_tra_list)
 
-    def _store_temp_trajectory(self, temp_trajectory, observations, actions, rewards, next_observations, terminals):
-        temp_trajectory['observations'].extend(observations)
-        temp_trajectory['actions'].extend(actions)
-        temp_trajectory['rewards'].extend(rewards)
-        temp_trajectory['next_observations'].extend(next_observations)
-        temp_trajectory['terminals'].extend(terminals)
+    def _store_temp_trajectory(self, temp_trajectory_buff, buff_type, observations, actions, rewards, next_observations, terminals):
+        temp_trajectory_buff['observations'].extend(observations)
+        temp_trajectory_buff['actions'].extend(actions)
+        temp_trajectory_buff['rewards'].extend(rewards)
+        temp_trajectory_buff['next_observations'].extend(next_observations)
+        temp_trajectory_buff['terminals'].extend(terminals)
 
         complete_trajectories = []
         terminal_inds = []
-
-        check_len = len(temp_trajectory['terminals'])
-        for idx in range(self.next_check_idx, check_len):
-            if temp_trajectory['terminals'][idx]:
+        check_len = len(temp_trajectory_buff['terminals'])
+        if buff_type == 'stochastic':
+            next_check_idx = self.sto_next_check_idx
+        else:
+            next_check_idx = self.det_next_check_idx
+        for idx in range(next_check_idx, check_len):
+            if temp_trajectory_buff['terminals'][idx]:
                 terminal_inds.append(idx)
-        self.next_check_idx = len(temp_trajectory['terminals'])
+        next_check_idx = len(temp_trajectory_buff['terminals'])
         begin_idx = 0
         for idx in terminal_inds:
-            complete_trajectory = (temp_trajectory['observations'][begin_idx:idx+1], temp_trajectory['actions'][begin_idx:idx+1],
-                                   temp_trajectory['rewards'][begin_idx:idx+1], temp_trajectory['next_observations'][begin_idx:idx+1],
-                                   temp_trajectory['terminals'][begin_idx:idx+1])
+            complete_trajectory = (temp_trajectory_buff['observations'][begin_idx:idx+1], temp_trajectory_buff['actions'][begin_idx:idx+1],
+                                   temp_trajectory_buff['rewards'][begin_idx:idx+1], temp_trajectory_buff['next_observations'][begin_idx:idx+1],
+                                   temp_trajectory_buff['terminals'][begin_idx:idx+1])
             begin_idx = idx + 1
             complete_trajectories.append(complete_trajectory)
-        temp_trajectory['observations'] = temp_trajectory['observations'][begin_idx:]
-        temp_trajectory['actions'] = temp_trajectory['actions'][begin_idx:]
-        temp_trajectory['rewards'] = temp_trajectory['rewards'][begin_idx:]
-        temp_trajectory['next_observations'] = temp_trajectory['next_observations'][begin_idx:]
-        temp_trajectory['terminals'] = temp_trajectory['terminals'][begin_idx:]
-        self.next_check_idx -= begin_idx
+        temp_trajectory_buff['observations'] = temp_trajectory_buff['observations'][begin_idx:]
+        temp_trajectory_buff['actions'] = temp_trajectory_buff['actions'][begin_idx:]
+        temp_trajectory_buff['rewards'] = temp_trajectory_buff['rewards'][begin_idx:]
+        temp_trajectory_buff['next_observations'] = temp_trajectory_buff['next_observations'][begin_idx:]
+        temp_trajectory_buff['terminals'] = temp_trajectory_buff['terminals'][begin_idx:]
+
+        next_check_idx -= begin_idx
+        if buff_type == 'stochastic':
+            self.sto_next_check_idx = next_check_idx
+        else:
+            self.det_next_check_idx = next_check_idx
 
         return complete_trajectories
 

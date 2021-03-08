@@ -26,6 +26,16 @@ from algorithm.RL_algorithm.soppo.memory import Memory
 from algorithm.RL_algorithm.soppo.runner import Runner
 
 
+def check_trajectory_terminal(ppo_tra, ddpg_tra):
+    ppo_terminals = ppo_tra[4]
+    ddpg_terminals = ddpg_tra[4]
+
+    ppo_tra_num = np.sum(ppo_terminals)
+    ddpg_tra_num = np.sum(ddpg_terminals)
+
+    return ppo_tra_num, ddpg_tra_num
+
+
 class Model(object):
     """
         supervised off-policy ppo
@@ -92,11 +102,14 @@ class Model(object):
             # run
             env_trajectories, epinfos = self.runner.run()
             self.memory.store(*env_trajectories)
-            advance_alg = ''
+            advance_alg = 'ppo'
             if len(epinfos) > 0:
-                ppo_episode_info_buffer.append(epinfos[0])
-                ddpg_episode_info_buffer.append(epinfos[1])
-                if epinfos[0]['r'] > epinfos[1]['r']:
+                ppo_tra_num, ddpg_tra_num = check_trajectory_terminal(*env_trajectories)
+                ppo_episode_info_buffer.extend(epinfos[0:ppo_tra_num])
+                ddpg_episode_info_buffer.extend(epinfos[ppo_tra_num:])
+                ppo_eprewmean = safe_mean([epinfo['r'] for epinfo in ppo_episode_info_buffer])
+                ddpg_eprewmean = safe_mean([epinfo['r'] for epinfo in ddpg_episode_info_buffer])
+                if ppo_eprewmean > ddpg_eprewmean:
                     advance_alg = 'ppo'
                 else:
                     advance_alg = 'ddpg'
@@ -109,11 +122,11 @@ class Model(object):
             ppo_train_terminal = ppo_trajectories[4]
             ppo_train_adv = GAE(ppo_train_obs, ppo_train_r, ppo_train_next_obs, ppo_train_terminal,
                                 self.target_vf_model, self.gamma, self.lam)
-            if advance_alg == 'ppo':
-                ppo_ref_pdparam = self.ppo_model.policy_model.cal_pdparams(ppo_train_obs)
-            else:
+            if advance_alg == 'ddpg':
                 ppo_ref_pdparam = self.ddpg_model.policy_model.cal_pdparams(ppo_train_obs)
-            ppo_train_input = (ppo_train_obs, ppo_train_ac, ppo_train_adv, ppo_ref_pdparam)
+                ppo_train_input = (ppo_train_obs, ppo_train_ac, ppo_train_adv, ppo_ref_pdparam)
+            else:
+                ppo_train_input = (ppo_train_obs, ppo_train_ac, ppo_train_adv, None)
             # ppo_batch_size = len(ppo_train_obs)
             # ppo_inds = np.arange(ppo_batch_size)
 
@@ -133,9 +146,9 @@ class Model(object):
                                      self.target_vf_model, self.gamma, self.lam)
                 if advance_alg == 'ppo':
                     ddpg_ref_pdparam = self.ppo_model.policy_model.cal_pdparams(ddpg_train_obs)
+                    ddpg_train_input = (ddpg_train_obs, ddpg_train_adv, ddpg_ref_pdparam)
                 else:
-                    ddpg_ref_pdparam = self.ddpg_model.policy_model.cal_pdparams(ddpg_train_obs)
-                ddpg_train_input = (ddpg_train_obs, ddpg_train_adv, ddpg_ref_pdparam)
+                    ddpg_train_input = (ddpg_train_obs, ddpg_train_adv, None)
                 ddpg_batch_size = len(ddpg_train_obs)
                 ddpg_inds = np.arange(ddpg_batch_size)
 

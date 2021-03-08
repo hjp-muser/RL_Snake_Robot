@@ -178,7 +178,7 @@ def build_qvalue(vf_model, actor_model, qvalue_network, **network_kwargs):
         assert callable(qvalue_network)
 
     def qvalue_fn(sess=None):
-        qf_input = tf.concat([vf_model.vf_latent, actor_model.actor_latent], axis=-1)
+        qf_input = tf.concat([vf_model.vf_latent, actor_model.pd_param], axis=-1)
         with tf.variable_scope('qf', reuse=tf.AUTO_REUSE):
             qf_latent = qvalue_network(qf_input)
         qvalue = QValueModel(

@@ -149,6 +149,7 @@ class Model(object):
         self.stats_list = []
         self._setup_actor_optimizer()
         self._setup_critic_optimizer()
+        self._setup_referer_optimizer()
         self._setup_target_network_updates()
         self._initialize()
 
@@ -182,11 +183,13 @@ class Model(object):
 
     def _setup_actor_optimizer(self):
         logger.info('setting up ddpg actor optimizer')
-        # self.actor_loss = -tf.reduce_mean(self.target_qf_model.qf)
-        pg_loss = -tf.reduce_mean(self.target_qf_model.qf)
-        ref_loss = tf.reduce_mean(tf.square(self.policy_model.pd_param - self.ref_ph))
-        self.actor_loss = self.pg_coef * pg_loss + self.ref_coef * ref_loss
+        self.actor_loss = -self.pg_coef * tf.reduce_mean(self.target_qf_model.qf)
         self.actor_train_variables = self.policy_train_variables + self.vf_train_variables
+        actor_shapes = [var.get_shape().as_list() for var in self.actor_train_variables]
+        actor_nb_params = sum([reduce(lambda x, y: x * y, shape) for shape in actor_shapes])
+        logger.info('  actor shapes: {}'.format(actor_shapes))
+        logger.info('  actor params: {}'.format(actor_nb_params))
+
         if self.actor_reg_coef > 0.:
             actor_reg_vars = [var for var in self.actor_train_variables if
                               var.name.endswith('/w:0') and 'output' not in var.name]
@@ -198,10 +201,6 @@ class Model(object):
                 weights_list=actor_reg_vars
             )
             self.actor_loss += actor_reg
-        actor_shapes = [var.get_shape().as_list() for var in self.actor_train_variables]
-        actor_nb_params = sum([reduce(lambda x, y: x * y, shape) for shape in actor_shapes])
-        logger.info('  actor shapes: {}'.format(actor_shapes))
-        logger.info('  actor params: {}'.format(actor_nb_params))
 
         self.actor_trainer = tf.train.AdamOptimizer(learning_rate=self.lr_ph, epsilon=1e-5)
         grads_and_var = self.actor_trainer.compute_gradients(self.actor_loss, self.actor_train_variables)
@@ -210,8 +209,8 @@ class Model(object):
             # Clip the gradients (normalize)
             grads, _grad_norm = tf.clip_by_global_norm(grads, self.max_grad_norm)
         self.actor_grads = grads
-        self.stats_list.extend([pg_loss, ref_loss, self.actor_loss])  # , self.actor_grads
-        self.stats_names.extend(['pg_loss', 'ref_loss', 'actor_loss'])  # , 'actor_grads'
+        self.stats_list.extend([self.actor_loss])  # , self.actor_grads
+        self.stats_names.extend(['actor_loss'])  # , 'actor_grads'
         grads_and_var = list(zip(grads, var))
         self.actor_optimizer = self.actor_trainer.apply_gradients(grads_and_var)
 
@@ -219,6 +218,11 @@ class Model(object):
         logger.info('setting up ddpg critic optimizer')
         self.critic_loss = self.qf_coef * tf.reduce_mean(tf.square(self.qf_model.qf - self.target_qvalue_ph))
         self.critic_train_variables = self.qf_train_variables
+        critic_shapes = [var.get_shape().as_list() for var in self.critic_train_variables]
+        critic_nb_params = sum([reduce(lambda x, y: x * y, shape) for shape in critic_shapes])
+        logger.info('  critic shapes: {}'.format(critic_shapes))
+        logger.info('  critic params: {}'.format(critic_nb_params))
+
         if self.critic_reg_coef > 0.:
             critic_reg_vars = [var for var in self.critic_train_variables if
                                var.name.endswith('/w:0') and 'output' not in var.name]
@@ -230,10 +234,6 @@ class Model(object):
                 weights_list=critic_reg_vars
             )
             self.critic_loss += critic_reg
-        critic_shapes = [var.get_shape().as_list() for var in self.critic_train_variables]
-        critic_nb_params = sum([reduce(lambda x, y: x * y, shape) for shape in critic_shapes])
-        logger.info('  critic shapes: {}'.format(critic_shapes))
-        logger.info('  critic params: {}'.format(critic_nb_params))
 
         self.critic_trainer = tf.train.AdamOptimizer(learning_rate=self.lr_ph, epsilon=1e-5)
         grads_and_var = self.critic_trainer.compute_gradients(self.critic_loss, self.critic_train_variables)
@@ -246,6 +246,23 @@ class Model(object):
         self.stats_names.extend(['critic_loss'])  # , 'critic_grads'
         grads_and_var = list(zip(grads, var))
         self.critic_optimizer = self.critic_trainer.apply_gradients(grads_and_var)
+
+    def _setup_referer_optimizer(self):
+        logger.info('setting up ddpg refer optimizer')
+        self.ref_loss = self.ref_coef * tf.reduce_mean(tf.square(self.policy_model.pd_param - self.ref_ph))
+        self.referer_train_variables = self.policy_train_variables
+
+        self.referer_trainer = tf.train.AdamOptimizer(learning_rate=self.lr_ph, epsilon=1e-5)
+        grads_and_var = self.referer_trainer.compute_gradients(self.ref_loss, self.referer_train_variables)
+        grads, var = zip(*grads_and_var)
+        if self.max_grad_norm is not None:
+            # Clip the gradients (normalize)
+            grads, _grad_norm = tf.clip_by_global_norm(grads, self.max_grad_norm)
+        self.actor_grads = grads
+        self.stats_list.extend([self.ref_loss])  # , self.actor_grads
+        self.stats_names.extend(['ref_loss'])  # , 'actor_grads'
+        grads_and_var = list(zip(grads, var))
+        self.referer_optimizer = self.referer_trainer.apply_gradients(grads_and_var)
 
     def _setup_target_network_updates(self):
         logger.info('setting up ddpg target updates ...')
@@ -277,6 +294,8 @@ class Model(object):
         cur_lr = self.lr(progress_fraction)
 
         train_ops = [self.actor_optimizer, self.critic_optimizer]
+        if ref_pdparams is not None:
+            train_ops.append(self.referer_optimizer)
         td_map = {
             self.policy_model.obs_ph: observations,
             self.target_policy_model.obs_ph: observations,
