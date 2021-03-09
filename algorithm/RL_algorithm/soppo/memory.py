@@ -72,20 +72,10 @@ def array_min2d(x):
 
 def decompose_trajectories(batches):
     observations = np.concatenate([batches[i][0] for i in range(len(batches))])
-    _len = len(observations)
-    observations = np.concatenate(observations).reshape(_len, -1)
-
     actions = np.concatenate([batches[i][1] for i in range(len(batches))])
-    actions = np.concatenate(actions).reshape(_len, -1)
-
     rewards = np.concatenate([batches[i][2] for i in range(len(batches))])
-    rewards = np.concatenate(rewards).reshape(_len, -1)
-
     next_observations = np.concatenate([batches[i][3] for i in range(len(batches))])
-    next_observations = np.concatenate(next_observations).reshape(_len, -1)
-
     terminals = np.concatenate([batches[i][4] for i in range(len(batches))])
-    terminals = np.concatenate(terminals).reshape(_len, -1)
 
     return observations, actions, rewards, next_observations, terminals
 
@@ -150,16 +140,18 @@ class Memory(object):
 
         return complete_trajectories
 
-    def sample(self, batch_size, stochastic_proportion=0.5):
+    def sample(self, batch_size, stochastic_proportion=2.0/3.0):
         # Draw such that we always have a proceeding element.
         assert batch_size > 1
-        stochastic_batch_size = 2   # int(batch_size * stochastic_proportion)
-        determined_batch_size = 1    # int(batch_size * (1 - stochastic_proportion))
+        stochastic_batch_size = round(batch_size * stochastic_proportion)
+        determined_batch_size = round(batch_size * (1 - stochastic_proportion))
         assert stochastic_batch_size > 0
         assert determined_batch_size > 0
         stochastic_trajectories_batch = self.stochastic_trajectories.get_batch(stochastic_batch_size)
         determined_trajectories_batch = self.determined_trajectories.get_batch(determined_batch_size)
-        batches = np.concatenate((stochastic_trajectories_batch, determined_trajectories_batch), axis=0)
+        batches = []
+        batches.extend(stochastic_trajectories_batch)
+        batches.extend(determined_trajectories_batch)
         observations, actions, rewards, next_observations, terminals = decompose_trajectories(batches)
 
         result = {

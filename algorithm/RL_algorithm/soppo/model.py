@@ -2,10 +2,11 @@ import os
 import time
 import numpy as np
 from collections import deque
+import tensorflow as tf
+from tensorboardX import SummaryWriter
 
 from baselines import logger
 from baselines.common import set_global_seeds
-import tensorflow as tf
 
 from algorithm.RL_algorithm.soppo.critics import build_value
 from algorithm.RL_algorithm.soppo.utils import get_session, GAE
@@ -51,6 +52,7 @@ class Model(object):
         self.gamma = gamma
         self.lam = lam
         self.def_path_pre = os.path.dirname(os.path.abspath(__file__)) + '/tmp/'
+        self.tf_writer = SummaryWriter(logdir=self.def_path_pre + '/log/')
         self.memory = Memory(limit=int(5000))
 
         if sess is None:
@@ -86,7 +88,7 @@ class Model(object):
         self.runner = Runner(env=self.env, models=[self.ppo_model, self.ddpg_model], nsteps=nsteps, gamma=gamma,
                              lam=lam)
 
-    def learn(self, total_timesteps, num_sample_batch=2, minibatch_size=40, num_train_epoch=4, seed=None,
+    def learn(self, total_timesteps, num_sample_batch=3, minibatch_size=40, num_train_epoch=4, seed=None,
               log_interval=10, save_interval=10):
         set_global_seeds(seed)
         total_timesteps = int(total_timesteps)
@@ -94,6 +96,7 @@ class Model(object):
         ddpg_episode_info_buffer = deque(maxlen=100)
         # Start total timer
 
+        log_id = 0
         for update in range(1, total_timesteps):
             # Start timer
             time_start = time.perf_counter()
@@ -109,6 +112,10 @@ class Model(object):
                 ddpg_episode_info_buffer.extend(epinfos[ppo_tra_num:])
                 ppo_eprewmean = safe_mean([epinfo['r'] for epinfo in ppo_episode_info_buffer])
                 ddpg_eprewmean = safe_mean([epinfo['r'] for epinfo in ddpg_episode_info_buffer])
+                self.tf_writer.add_scalar('ppo_reward', ppo_eprewmean, log_id)
+                self.tf_writer.add_scalar('ddpg_reward', ddpg_eprewmean, log_id)
+                self.tf_writer.add_scalar('mean_reward', (ppo_eprewmean + ddpg_eprewmean) / 2, log_id)
+                log_id += 1
                 if ppo_eprewmean > ddpg_eprewmean:
                     advance_alg = 'ppo'
                 else:
@@ -178,19 +185,14 @@ class Model(object):
                 logger.record_tabular('ddpg_eplenmean', safe_mean([epinfo['l'] for epinfo in ddpg_episode_info_buffer]))
                 logger.record_tabular("misc/serial_timesteps", update * self.nsteps)
                 logger.record_tabular("misc/update_timesteps", update)
-                # logger.record_tabular("misc/explained_variance", float(ev))
-
-                # for (stat_val, stat_name) in zip(self.ppo_model.stats_list, self.ppo_model.stats_names):
-                #     logger.record_tabular('ppo_loss/' + stat_name, stat_val)
-                # for (stat_val, stat_name) in zip(self.ddpg_model.stats_list, self.ddpg_model.stats_names):
-                #     logger.record_tabular('ddpg_loss/' + stat_name, stat_val)
                 logger.dump_tabular()
 
             if save_interval and update % save_interval == 0:
                 pass
                 file_name = time.strftime('Y%YM%mD%d_h%Hm%Ms%S', time.localtime(time.time()))
-                model_save_path = self.def_path_pre + file_name
+                model_save_path = self.def_path_pre + 'model/' + file_name
                 self.save(model_save_path)
+            self.tf_writer.close()
 
         return self
 
